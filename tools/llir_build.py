@@ -12,12 +12,14 @@ from __future__ import annotations
 
 import itertools
 import re
-import tempfile
 
-from llvm_benchmarks_tools.capture import (  # noqa: F401 - re-export
-    iter_cases as iter_cases,
-)
-from triton._C.libtriton import amd  # type: ignore
+try:
+    from triton.benchmarks.tools.capture import (  # noqa: F401 - re-export
+        iter_cases as iter_cases,
+    )
+except ImportError:
+    # Plain python3: sibling file in the same directory.
+    from capture import iter_cases as iter_cases  # noqa: F401 - re-export
 from triton.backends.amd.compiler import HIPBackend, HIPOptions
 
 
@@ -84,11 +86,9 @@ def build_hsaco(llir: str, arch: str) -> tuple[str, bytes]:
     not need the exact original codegen options, only a valid object.
     """
     label, amdgcn = round_trip(llir, arch)[0]
-    obj = amd.assemble_amdgcn(amdgcn, arch, "")
-    with tempfile.NamedTemporaryFile() as tmp_out:
-        with tempfile.NamedTemporaryFile() as tmp_in:
-            with open(tmp_in.name, "wb") as fd_in:
-                fd_in.write(obj)
-            amd.link_hsaco(tmp_in.name, tmp_out.name)
-        with open(tmp_out.name, "rb") as fd_out:
-            return label, fd_out.read()
+    # NOTE: assemble via HIPBackend.make_hsaco (the backend's ctypes wrapper
+    # around the standalone codegen .so), not the raw
+    # ``amd.assemble_amdgcn`` binding: libtriton's statically linked LLVM has
+    # no AMDGPU target registered, so the raw binding fails standalone with a
+    # target lookup error.
+    return label, HIPBackend.make_hsaco(amdgcn, {}, HIPOptions(arch=arch))

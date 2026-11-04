@@ -11,13 +11,13 @@ import types
 import unittest
 
 try:
-    from llvm_benchmarks_tools.capture import (
+    from triton.benchmarks.tools.capture import (
         bind_launch_args,
         eval_grid,
         record_launch,
         write_case,
     )
-    from llvm_benchmarks_tools.launch_hip import (
+    from triton.benchmarks.tools.launch_hip import (
         launch_case,
         make_arg_ptrs,
         parse_kernel_signature,
@@ -25,18 +25,9 @@ try:
         validate_launch,
     )
 except ImportError:
-    # Plain python3: mirror the buck layout (base_module llvm_benchmarks_tools) so
-    # the qualified sibling imports resolve.
-    _pkg = types.ModuleType("llvm_benchmarks_tools")
-    _pkg.__path__ = [os.path.dirname(os.path.abspath(__file__))]
-    sys.modules["llvm_benchmarks_tools"] = _pkg
-    from llvm_benchmarks_tools.capture import (
-        bind_launch_args,
-        eval_grid,
-        record_launch,
-        write_case,
-    )
-    from llvm_benchmarks_tools.launch_hip import (
+    # Plain python3: sibling files in the same directory.
+    from capture import bind_launch_args, eval_grid, record_launch, write_case
+    from launch_hip import (
         launch_case,
         make_arg_ptrs,
         parse_kernel_signature,
@@ -325,7 +316,11 @@ class RecordTest(unittest.TestCase):
         inp = _FakeTensor([1.0] * 8)
         jit_fn = _FakeFn(["o", "i", "n"], [False, False, False])
         # Simulate pre-hashes taken before the run, then mutate the output.
-        from llvm_benchmarks_tools.capture import _tensor_sample_hash
+        try:
+            from triton.benchmarks.tools.capture import _tensor_sample_hash
+        except ImportError:
+            # Plain python3: sibling file in the same directory.
+            from capture import _tensor_sample_hash
 
         pre = {"o": _tensor_sample_hash(out), "i": _tensor_sample_hash(inp)}
         out._data = [2.0] * 8
@@ -543,11 +538,12 @@ class LaunchCaseTest(unittest.TestCase):
             self.assertEqual(arch, "gfx950")
             return ("fake-opts", b"HSACO")
 
-        fake = types.ModuleType("llvm_benchmarks_tools.llir_build")
+        fake = types.ModuleType("triton.benchmarks.tools.llir_build")
         fake.build_hsaco = _fake_build  # type: ignore[attr-defined]
-        key = "llvm_benchmarks_tools.llir_build"
-        real = sys.modules.get(key)
-        sys.modules[key] = fake
+        keys = ("triton.benchmarks.tools.llir_build", "llir_build")
+        reals = {k: sys.modules.get(k) for k in keys}
+        for k in keys:
+            sys.modules[k] = fake
         try:
             with tempfile.TemporaryDirectory() as tmp:
                 self._write_case(tmp, args, llir, block or {"num_warps": 4})
@@ -561,10 +557,11 @@ class LaunchCaseTest(unittest.TestCase):
                     tmp, "gfx950", torch, hip, 0, False, hsaco_path, collect
                 )
         finally:
-            if real is None:
-                del sys.modules[key]
-            else:
-                sys.modules[key] = real
+            for k in keys:
+                if reals[k] is None:
+                    del sys.modules[k]
+                else:
+                    sys.modules[k] = reals[k]
         return res, torch, hip, built
 
     def test_replay_ok(self) -> None:

@@ -383,7 +383,11 @@ def launch_case(
         with open(hsaco_path, "rb") as f:
             hsaco = f.read()
     else:
-        from llvm_benchmarks_tools.llir_build import build_hsaco
+        try:
+            from triton.benchmarks.tools.llir_build import build_hsaco
+        except ImportError:
+            # Plain python3: sibling file in the same directory.
+            from llir_build import build_hsaco
 
         _opts_label, hsaco = build_hsaco(llir, arch)
         if write_hsaco:
@@ -481,7 +485,12 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
 
     import torch
-    from llvm_benchmarks_tools.llir_build import iter_cases
+
+    try:
+        from triton.benchmarks.tools.llir_build import iter_cases
+    except ImportError:
+        # Plain python3: sibling file in the same directory.
+        from llir_build import iter_cases
 
     hip = _hip()
     cases = [

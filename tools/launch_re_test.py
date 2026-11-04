@@ -14,8 +14,6 @@ torch + HIP only) and checks exactness against reproduced RNG inputs.
 
 import json
 import os
-import sys
-import types
 import unittest
 
 try:
@@ -24,12 +22,10 @@ except ImportError:
     torch = None
 
 try:
-    from llvm_benchmarks_tools.launch_hip import _hip, launch_case
+    from triton.benchmarks.tools.launch_hip import _hip, launch_case
 except ImportError:
-    _pkg = types.ModuleType("llvm_benchmarks_tools")
-    _pkg.__path__ = [os.path.dirname(os.path.abspath(__file__))]
-    sys.modules["llvm_benchmarks_tools"] = _pkg
-    from llvm_benchmarks_tools.launch_hip import _hip, launch_case
+    # Plain python3: sibling file in the same directory.
+    from launch_hip import _hip, launch_case
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 

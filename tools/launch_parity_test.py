@@ -35,9 +35,7 @@ from __future__ import annotations
 
 import json
 import os
-import sys
 import tempfile
-import types
 import unittest
 
 try:
@@ -53,16 +51,12 @@ except ImportError:
     torch = None
 
 try:
-    from llvm_benchmarks_tools.capture import CaptureSession, write_case
-    from llvm_benchmarks_tools.launch_hip import _hip, launch_case, REPS, SEED, WARMUP
+    from triton.benchmarks.tools.capture import CaptureSession, write_case
+    from triton.benchmarks.tools.launch_hip import _hip, launch_case, REPS, SEED, WARMUP
 except ImportError:
-    # Plain python3: mirror the buck layout (base_module llvm_benchmarks_tools)
-    # so the qualified sibling imports resolve.
-    _pkg = types.ModuleType("llvm_benchmarks_tools")
-    _pkg.__path__ = [os.path.dirname(os.path.abspath(__file__))]
-    sys.modules["llvm_benchmarks_tools"] = _pkg
-    from llvm_benchmarks_tools.capture import CaptureSession, write_case
-    from llvm_benchmarks_tools.launch_hip import _hip, launch_case, REPS, SEED, WARMUP
+    # Plain python3: sibling files in the same directory.
+    from capture import CaptureSession, write_case
+    from launch_hip import _hip, launch_case, REPS, SEED, WARMUP
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -221,9 +215,13 @@ class ParityTest(unittest.TestCase):
             triton_ms = self._live_baseline(x, y, out_bench, grid)
 
             try:
-                from llvm_benchmarks_tools.llir_build import build_hsaco
-            except ImportError as e:
-                self.skipTest(f"llir_build unavailable: {e!r}")
+                from triton.benchmarks.tools.llir_build import build_hsaco
+            except ImportError:
+                try:
+                    # Plain python3: sibling file in the same directory.
+                    from llir_build import build_hsaco
+                except ImportError as e:
+                    self.skipTest(f"llir_build unavailable: {e!r}")
             try:
                 _opts, hsaco = build_hsaco(llir, arch)
             except Exception as e:  # noqa: BLE001 - codegen env, skip with reason
