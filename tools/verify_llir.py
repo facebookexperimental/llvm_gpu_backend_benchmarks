@@ -26,7 +26,7 @@ import os
 import sys
 
 import torch  # noqa: F401 - imported for triton backend discovery at runtime
-from llvm_benchmarks_tools.llir_build import iter_cases, KERNEL_RE, round_trip
+from triton.benchmarks.tools.llir_build import iter_cases, KERNEL_RE, round_trip
 
 
 def structural_check(text: str) -> list[str]:
