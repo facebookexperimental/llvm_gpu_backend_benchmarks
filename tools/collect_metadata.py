@@ -19,7 +19,6 @@ import json
 import os
 import re
 import sys
-import types
 
 VERSION = 1
 CASE_SUFFIX_RE = re.compile(r"__k\d+$")
@@ -29,18 +28,15 @@ WAVEFRONT = 64  # AMD wavefront size (mirrors launch_hip)
 def _siblings():
     """Sibling helpers (buck layout, mirrored for plain python3)."""
     try:
-        from llvm_benchmarks_tools.capture import iter_cases
-        from llvm_benchmarks_tools.launch_hip import (
+        from triton.benchmarks.tools.capture import iter_cases
+        from triton.benchmarks.tools.launch_hip import (
             parse_kernel_signature,
             strip_scratch,
             validate_launch,
         )
     except ImportError:
-        _pkg = types.ModuleType("llvm_benchmarks_tools")
-        _pkg.__path__ = [os.path.dirname(os.path.abspath(__file__))]
-        sys.modules["llvm_benchmarks_tools"] = _pkg
-        from llvm_benchmarks_tools.capture import iter_cases
-        from llvm_benchmarks_tools.launch_hip import (
+        from capture import iter_cases  # pyrefly: ignore [missing-import]
+        from launch_hip import (  # pyrefly: ignore [missing-import]
             parse_kernel_signature,
             strip_scratch,
             validate_launch,

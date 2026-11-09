@@ -1,0 +1,238 @@
+# Candidate taxonomy for tlx_ops: the (strategy x capability) coverage contract.
+#
+# For every tlx_ops target in targets.yaml, this file lists the major
+# execution strategies (kernel variants of importance) and the masking
+# capability values that the export must include. Resolution is by compiled
+# kernel name (see candidates.py): each strategy lists kernel-name substrings
+# in first-match-wins order, so longer names precede their prefixes.
+#
+# Conventions (mirroring targets.yaml):
+# - `notes` always cites the source that justifies the entry (module path and
+#   the dispatch/registry it comes from). All paths below are relative to
+#   third-party/triton/beta/triton/third_party/tlx/ops/kernels/.
+# - `auxiliary: true` marks helper kernels (reduces, converts, preprocess,
+#   quantize) that ride along with a major strategy. They are tracked and
+#   preserved through pruning but reported separately from major strategies.
+# - `default_strategy` resolves kernels no pattern matches. With
+#   `default_applies_to: fwd/bwd` it wins outright for that mode; with `any`
+#   (or absent) it is the fallback after patterns. Ops with several major
+#   strategies and no default resolve the rest to `unknown`, which coverage
+#   reports so patterns stay honest instead of silently mislabeling.
+# - `masking` lists the masking capability values each op must include.
+#   dtype/mode/causal/space are already tracked per case in input_spec (see
+#   export_tlx_ops.py builders) and need no taxonomy entry.
+# - `candidates.py --check` validates this file (structure plus ops mirrored
+#   with targets.yaml). `candidates.py --coverage` reports per-manifest
+#   strategy/masking coverage from the recorded labels.
+#
+# Scope: tlx_ops only. Tutorials and tritonbench get their own taxonomy when
+# their strategies are curated.
+
+version: 1
+arch:
+  gfx950:
+    tlx_ops:
+      - op: mm
+        strategies:
+          - name: split_k_reduce
+            auxiliary: true
+            kernel_patterns: [_reduce_k_kernel, _iw_reduce_k_kernel]
+            notes: "mm/gfx950.py fp32 partial reduce for SPLIT_K paths (lds and streamk)"
+          - name: stream_k
+            kernel_patterns: [_iw_streamk_kernel]
+            notes: "mm/gfx950.py stream-K inter-wave path (_launch_optimized_inter_wave kind=streamk)"
+          - name: local_split_u
+            kernel_patterns: [_local_split_u_kernel, _local_split_u_lds_kernel]
+            notes: "mm/gfx950.py LocalSplitU measured plans (_KNOWN_PLANS via _launch_validated)"
+          - name: persistent
+            kernel_patterns: [_persistent_kernel, _wg_kernel_persistent]
+            notes: "mm/gfx950.py persistent GEMM (_launch_persistent specializations)"
+          - name: register_resident
+            kernel_patterns: [_register_kernel_impl, _short_k_register_kernel, _fragmented_register, _wg_kernel_register, _range_register]
+            notes: "mm/gfx950.py register-resident family (register, range_register, short_k, fragmented, transposed)"
+          - name: direct_to_lds
+            kernel_patterns: [_row_major_direct_kernel, _wg_kernel_regular]
+            notes: "mm/gfx950.py direct-to-LDS family; shared-core (_launch_lds) top kernel name TBD, resolves unknown until mapped"
+          - name: inter_wave
+            kernel_patterns: [_iw_matmul_tile, _iw_a16w16_8wave, _iw_matmul_full_tile]
+            notes: "mm/gfx950.py promoted inter-wave family (inter_wave, ragged_n, m192n256, hybrid_n160 head)"
+        masking: [even, k_tail, mn_tail]
+      - op: addmm
+        strategies:
+          - name: split_k_reduce
+            auxiliary: true
+            kernel_patterns: [_reduce_k_kernel, _iw_reduce_k_kernel]
+            notes: "addmm/gfx950.py delegates to mm/gfx950.py kernels; fp32 partial reduce for SPLIT_K paths"
+          - name: stream_k
+            kernel_patterns: [_iw_streamk_kernel]
+            notes: "addmm/gfx950.py delegates to mm/gfx950.py kernels; stream-K inter-wave path"
+          - name: local_split_u
+            kernel_patterns: [_local_split_u_kernel, _local_split_u_lds_kernel]
+            notes: "addmm/gfx950.py delegates to mm/gfx950.py kernels; LocalSplitU measured plans"
+          - name: persistent
+            kernel_patterns: [_persistent_kernel, _wg_kernel_persistent]
+            notes: "addmm/gfx950.py delegates to mm/gfx950.py kernels; persistent GEMM"
+          - name: register_resident
+            kernel_patterns: [_register_kernel_impl, _short_k_register_kernel, _fragmented_register, _wg_kernel_register, _range_register]
+            notes: "addmm/gfx950.py delegates to mm/gfx950.py kernels; register-resident family"
+          - name: direct_to_lds
+            kernel_patterns: [_row_major_direct_kernel, _wg_kernel_regular]
+            notes: "addmm/gfx950.py delegates to mm/gfx950.py kernels; direct-to-LDS family"
+          - name: inter_wave
+            kernel_patterns: [_iw_matmul_tile, _iw_a16w16_8wave, _iw_matmul_full_tile]
+            notes: "addmm/gfx950.py delegates to mm/gfx950.py kernels; promoted inter-wave family"
+        masking: [even, k_tail, mn_tail]
+      - op: grouped_gemm
+        default_strategy: quadrant_pipeline
+        strategies:
+          - name: quadrant_pipeline
+            kernel_patterns: [_grouped_gemm_tile]
+            notes: "grouped_gemm/gfx950.py 2x2 quadrant inter-wave pipeline incl _grouped_gemm_tile_generic"
+        masking: [uniform, ragged]
+      - op: grouped_gemm_mxfp8
+        default_strategy: persistent_scaled
+        strategies:
+          - name: persistent_scaled
+            kernel_patterns: [_mxfp8_grouped_gemm_kernel]
+            notes: "grouped_gemm_mxfp8/gfx950.py persistent scaled-MFMA kernel reusing the FP16 pipeline"
+        masking: [uniform, ragged]
+      - op: mm_mxfp8
+        strategies:
+          - name: scaled_mfma
+            kernel_patterns: []
+            notes: "mm_mxfp8/gfx950.py scaled-MFMA GEMM; kernel name unmapped until first provisional export"
+      - op: flash_attn
+        strategies:
+          - name: rotated_cluster
+            kernel_patterns: [_attn_fwd_cluster]
+            notes: "flash_attn/gfx950.py rotated-cluster forward pipelines (incl short-causal and persistent)"
+          - name: d64
+            kernel_patterns: [_attn_bwd_d64, _attn_bwd_dq_d64, _attn_bwd_dkdv_d64]
+            notes: "flash_attn/gfx950_bwd.py D64 dispatch families (direct, fused, causal, scheduled); listed before gqa so causal_gqa8 stays in its head-dim family"
+          - name: d128
+            kernel_patterns: [_attn_bwd_dkdv_d128, _attn_bwd_dq_d128, _dense_bwd]
+            notes: "flash_attn/gfx950_bwd.py D128 routes (single, pipeline, rect, split, dense)"
+          - name: d256
+            kernel_patterns: [d256]
+            notes: "flash_attn/gfx950_bwd.py D256 producer/consumer routes"
+          - name: gqa
+            kernel_patterns: [_attn_bwd_gqa]
+            notes: "flash_attn/gfx950_bwd.py GQA-specific kernels outside the D64 family"
+          - name: preprocess
+            auxiliary: true
+            kernel_patterns: [_attn_bwd_preprocess_kernel]
+            notes: "flash_attn/gfx950_bwd.py delta/LSE preprocess helper"
+        masking: [causal, noncausal]
+      - op: flash_attn_mxfp8
+        default_strategy: ping_pong
+        strategies:
+          - name: ping_pong
+            kernel_patterns: []
+            notes: "flash_attn_mxfp8/gfx950.py persistent two-warp-group ping-pong forward; main kernel name TBD, resolved by default"
+          - name: quantize
+            auxiliary: true
+            kernel_patterns: [_quantize_mxfp8]
+            notes: "flash_attn_mxfp8/gfx950.py E4M3/E8M0 quantize helpers for QKV"
+        masking: [causal, noncausal]
+      - op: flash_attn_varlen
+        strategies:
+          - name: packed_fwd
+            kernel_patterns: [_flash_attn_varlen_fwd]
+            notes: "flash_attn_varlen/gfx950.py packed varlen forward (mfma_interleaved)"
+          - name: interleaved_wide
+            kernel_patterns: [_varlen_bwd_interleaved_bm32, _varlen_bwd_interleaved_bm16_bn256]
+            notes: "flash_attn_varlen/gfx950_bwd.py wide/split-GQA masked phases; listed before baseline (prefix order)"
+          - name: interleaved_baseline
+            kernel_patterns: [_varlen_bwd_interleaved]
+            notes: "flash_attn_varlen/gfx950_bwd.py baseline BN128/BM16 phases"
+          - name: dq_owner
+            kernel_patterns: [_varlen_bwd_dq_owner_kernel]
+            notes: "flash_attn_varlen/gfx950_bwd.py Q-owner path with fixed D128 BM64/BN64 tiles"
+          - name: dkdv_reduce
+            auxiliary: true
+            kernel_patterns: [_varlen_dkdv_reduce_kernel]
+            notes: "flash_attn_varlen/gfx950_bwd.py KV partial reduce helper"
+          - name: dq_convert
+            auxiliary: true
+            kernel_patterns: [_varlen_dq_convert_kernel, _varlen_mha_dq_convert]
+            notes: "flash_attn_varlen/gfx950_bwd.py DQ accumulation convert helpers"
+        masking: [packed_causal, packed_noncausal]
+      - op: flash_attn_varlen_backward
+        strategies:
+          - name: interleaved_wide
+            kernel_patterns: [_varlen_bwd_interleaved_bm32, _varlen_bwd_interleaved_bm16_bn256]
+            notes: "flash_attn_varlen/gfx950_bwd.py wide/split-GQA masked phases; listed before baseline (prefix order)"
+          - name: interleaved_baseline
+            kernel_patterns: [_varlen_bwd_interleaved]
+            notes: "flash_attn_varlen/gfx950_bwd.py baseline BN128/BM16 phases"
+          - name: dq_owner
+            kernel_patterns: [_varlen_bwd_dq_owner_kernel]
+            notes: "flash_attn_varlen/gfx950_bwd.py Q-owner path with fixed D128 BM64/BN64 tiles"
+          - name: preprocess
+            auxiliary: true
+            kernel_patterns: [_varlen_bwd_preprocess]
+            notes: "flash_attn_varlen/gfx950_bwd.py delta/DQ-acc preprocess helpers"
+          - name: dkdv_reduce
+            auxiliary: true
+            kernel_patterns: [_varlen_dkdv_reduce_kernel]
+            notes: "flash_attn_varlen/gfx950_bwd.py KV partial reduce helper"
+          - name: dq_convert
+            auxiliary: true
+            kernel_patterns: [_varlen_dq_convert_kernel, _varlen_mha_dq_convert]
+            notes: "flash_attn_varlen/gfx950_bwd.py DQ accumulation convert helpers"
+        masking: [packed_causal, packed_noncausal]
+      - op: prepare_flash_attn_varlen_backward
+        strategies:
+          - name: compact_schedules
+            kernel_patterns: [_varlen_build_compact_schedules, _varlen_validate_offsets]
+            notes: "flash_attn_varlen/gfx950_bwd.py host-validated plan build: offset validation plus compact schedule kernels"
+      - op: hstu_attn_dev
+        default_strategy: ragged_fwd
+        default_applies_to: fwd
+        strategies:
+          - name: ragged_fwd
+            kernel_patterns: []
+            notes: "hstu_attn/gfx950.py ragged forward port; launched kernel name TBD, resolved by default for fwd mode"
+          - name: scheduled_bwd
+            kernel_patterns: [_tlx_gfx950_hstu_fa_schedule_bwd_kernel, _tlx_gfx950_hstu_native_dq, _tlx_gfx950_hstu_fa_dq, _tlx_gfx950_hstu_fa_dk, _tlx_gfx950_hstu_fa_dv]
+            notes: "hstu_attn/gfx950.py scheduled backward kernels and DQ/DK/DV helpers"
+        masking: [causal]
+      - op: hstu_cross_attn
+        strategies:
+          - name: split_kv_fwd
+            kernel_patterns: [_tlx_gfx950_cross_attn_fwd]
+            notes: "hstu_cross_attn/gfx950.py split-KV forward (tlx_split_kv; incl _fwd_split_kv)"
+          - name: split_kv_merge
+            auxiliary: true
+            kernel_patterns: [_tlx_gfx950_cross_attn_split_kv_merge]
+            notes: "hstu_cross_attn/gfx950.py split-KV partial merge helper"
+          - name: scheduled_bwd
+            kernel_patterns: [_tlx_gfx950_cross_attn_bwd, _tlx_gfx950_cross_attn_v3_ttgir_bwd]
+            notes: "hstu_cross_attn/gfx950.py + _backward_pipeline.py scheduled backward kernels"
+      - op: kda_paged_prefill
+        default_strategy: chunk_pipeline
+        strategies:
+          - name: chunk_pipeline
+            kernel_patterns: [_preprocess_chunk_kernel, _solve_16x16_kernel, _merge_inverse_64_kernel, _form_w_u_kernel, _state_scan_kernel, _output_tail_kernel]
+            notes: "kda/gfx950_prefill.py 64-token-chunk stateful pipeline; all six stage kernels share the strategy"
+      - op: kda_recurrent_decode
+        default_strategy: recurrent
+        strategies:
+          - name: recurrent
+            kernel_patterns: [_kda_recurrent_decode_kernel]
+            notes: "kda/gfx950_decode.py single-token recurrent decode kernel"
+      - op: mm_torchtlx
+        strategies:
+          - name: inductor
+            kernel_patterns: []
+            notes: "inductor path via torch.compile; resolved by op, kernel names are inductor-generated"
+      - op: addmm_torchtlx
+        strategies:
+          - name: inductor
+            kernel_patterns: []
+            notes: "inductor path via torch.compile; resolved by op, kernel names are inductor-generated"
+      - op: bmm_torchtlx
+        strategies:
+          - name: inductor
+            kernel_patterns: []
+            notes: "inductor path via torch.compile; resolved by op, kernel names are inductor-generated"
