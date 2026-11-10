@@ -466,7 +466,9 @@ def launch_case(
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Replay exported kernels via HIP.")
-    parser.add_argument("--arch", required=True, choices=["gfx950", "gfx942"])
+    parser.add_argument(
+        "--arch", required=True, choices=["gfx950", "gfx942", "gfx1250"]
+    )
     parser.add_argument("--out", required=True, help="export root")
     parser.add_argument("--limit", type=int, default=0, help="launch at most N cases")
     parser.add_argument(

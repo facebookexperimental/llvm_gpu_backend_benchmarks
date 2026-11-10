@@ -126,7 +126,9 @@ def _check_case(source, target, case, cdir, arch, dump_regen) -> str:
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Verify exported LLIR via LLVM.")
-    parser.add_argument("--arch", required=True, choices=["gfx950", "gfx942"])
+    parser.add_argument(
+        "--arch", required=True, choices=["gfx950", "gfx942", "gfx1250"]
+    )
     parser.add_argument("--out", required=True, help="export root")
     parser.add_argument("--limit", type=int, default=0, help="check at most N cases")
     parser.add_argument(
