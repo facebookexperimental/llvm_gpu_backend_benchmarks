@@ -7,7 +7,7 @@ For every case dir with a kernel.llir plus a compile.json ``launch`` record
 LLIR (default backend options), replays the recorded launch on GPU via raw
 HIP module calls, and reports median ms plus output finiteness::
 
-    buck2 run @//mode/opt-amd-gpu fbcode//triton/benchmarks/tools:launch_hip -- \\
+    buck2 run @fbcode//mode/opt-amd-gpu fbcode//triton/benchmarks/tools:launch_hip -- \\
         --arch gfx950 --out /data/llvm_export_20250101 [--match mm] [--limit 5]
 
 Requires a GPU host, torch, and TRITON_AMD_CODEGEN_PATH (same as the
@@ -466,7 +466,7 @@ def launch_case(
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Replay exported kernels via HIP.")
-    parser.add_argument("--arch", required=True, choices=["gfx950"])
+    parser.add_argument("--arch", required=True, choices=["gfx950", "gfx942"])
     parser.add_argument("--out", required=True, help="export root")
     parser.add_argument("--limit", type=int, default=0, help="launch at most N cases")
     parser.add_argument(

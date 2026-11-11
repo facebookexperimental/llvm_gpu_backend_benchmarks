@@ -340,7 +340,7 @@ def collect(out_root: str, arch: str) -> dict:
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Collect corpus metadata.")
-    parser.add_argument("--arch", required=True, choices=["gfx950"])
+    parser.add_argument("--arch", required=True, choices=["gfx950", "gfx942"])
     parser.add_argument("--out", required=True, help="export root")
     args = parser.parse_args(argv)
     doc = collect(args.out, args.arch)

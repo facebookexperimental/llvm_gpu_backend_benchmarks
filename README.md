@@ -59,8 +59,6 @@ llvm_gpu_backend_benchmarks is MIT licensed, as found in the LICENSE file.
 
 `tools/` holds the benchmark pipeline (see `tools/README.md`): the HIP
 runtime launcher (`launch_hip.py`), the LLIR round-trip verifier
-(`verify_llir.py`), the metadata collector (`collect_metadata.py`), and
-the IR export/generation tooling (`discover.py`/`targets.yaml` drift
-check, the three `export_*` drivers, `prune_top.py`, `run_export.sh`,
-`run_scheduled.py`) that regenerates the `gfx950/` corpus on an MI350X
-host.
+(`verify_llir.py`), and the metadata collector (`collect_metadata.py`).
+These tools consume the generated kernels and manifests in each architecture's
+corpus directory.

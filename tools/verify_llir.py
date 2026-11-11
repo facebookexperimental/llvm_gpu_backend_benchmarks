@@ -11,7 +11,7 @@ byte-for-byte the input LLVM consumed.
 
 Run on the export host (CPU-only, no GPU kernels launched)::
 
-    buck2 run @//mode/opt-amd-gpu fbcode//triton/benchmarks/tools:verify_llir -- \\
+    buck2 run @fbcode//mode/opt-amd-gpu fbcode//triton/benchmarks/tools:verify_llir -- \\
         --arch gfx950 --out /data/llvm_export_20250101
 
 Requires TRITON_AMD_CODEGEN_PATH (same as the exporters).
@@ -23,6 +23,7 @@ import argparse
 import difflib
 import json
 import os
+import re
 import sys
 
 import torch  # noqa: F401 - imported for triton backend discovery at runtime
@@ -34,7 +35,9 @@ def structural_check(text: str) -> list[str]:
     problems = []
     if "; ModuleID" not in text[:500] and "source_filename" not in text[:500]:
         problems.append("missing LLVM module header")
-    if 'target triple = "amdgcn-amd-amdhsa"' not in text:
+    if not re.search(r'target triple = "amdgpu[\d.]*-amd-amdhsa"', text) and (
+        'target triple = "amdgcn-amd-amdhsa"' not in text
+    ):
         problems.append("missing amdgcn triple")
     if "target datalayout" not in text:
         problems.append("missing datalayout")
@@ -123,7 +126,7 @@ def _check_case(source, target, case, cdir, arch, dump_regen) -> str:
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Verify exported LLIR via LLVM.")
-    parser.add_argument("--arch", required=True, choices=["gfx950"])
+    parser.add_argument("--arch", required=True, choices=["gfx950", "gfx942"])
     parser.add_argument("--out", required=True, help="export root")
     parser.add_argument("--limit", type=int, default=0, help="check at most N cases")
     parser.add_argument(
