@@ -24,6 +24,17 @@ The launcher builds HSACO from LLVM IR, allocates the recorded inputs, launches
 through HIP, and reports latency and output finiteness. Replay requires valid
 launch metadata in `compile.json`.
 
+## Prune location info
+
+```bash
+python3 prune_loc.py --arch gfx942 --out ..
+```
+
+Strips MLIR `#loc`, LLVM `!dbg`/`!DI*`, and assembler `.file`/`.loc` debug
+info from every `kernel.*` artifact and refreshes the recorded file hashes.
+Artifacts become host-independent, so regenerations only diff on real IR
+changes. `--dry-run` reports the saving without writing.
+
 ## Collect metadata
 
 From this directory:
