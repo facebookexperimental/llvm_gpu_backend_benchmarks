@@ -1,22 +1,22 @@
 module attributes {"ttg.cluster-dim-x" = 1 : i32, "ttg.cluster-dim-y" = 1 : i32, "ttg.cluster-dim-z" = 1 : i32} {
   tt.func public @matmul_kernel_gfx942(%a_ptr: !tt.ptr<f16> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %b_ptr: !tt.ptr<f16> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %bias_ptr: !tt.ptr<f16> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %c_ptr: !tt.ptr<f16> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}) attributes {noinline = false} {
     %acc = arith.constant dense<0.000000e+00> : tensor<128x256xf32>
-    %c576_i32 = arith.constant 576 : i32
-    %width = arith.constant 239 : i32
+    %c1024_i32 = arith.constant 1024 : i32
     %c64_i32 = arith.constant 64 : i32
     %aligned = arith.constant 192 : i32
-    %c_offsets = arith.constant dense<61040> : tensor<128x1xi32>
-    %mask = arith.constant dense<61040> : tensor<1x256xi32>
-    %mask_0 = arith.constant dense<128> : tensor<128x1xi32>
-    %cst = arith.constant dense<576> : tensor<1x256xi32>
-    %cst_1 = arith.constant dense<576> : tensor<128x1xi32>
-    %offs_n = arith.constant dense<61040> : tensor<256xi32>
+    %c_offsets = arith.constant dense<2048> : tensor<128x1xi32>
+    %mask = arith.constant dense<2048> : tensor<1x256xi32>
+    %mask_0 = arith.constant dense<3072> : tensor<128x1xi32>
+    %cst = arith.constant dense<1024> : tensor<1x256xi32>
+    %cst_1 = arith.constant dense<1024> : tensor<128x1xi32>
+    %offs_n = arith.constant dense<2048> : tensor<256xi32>
     %c256_i32 = arith.constant 256 : i32
-    %offs_m = arith.constant dense<128> : tensor<128xi32>
+    %offs_m = arith.constant dense<3072> : tensor<128xi32>
     %c128_i32 = arith.constant 128 : i32
     %c0_i32 = arith.constant 0 : i32
-    %c8_i32 = arith.constant 8 : i32
     %c1_i32 = arith.constant 1 : i32
+    %c8_i32 = arith.constant 8 : i32
+    %grid_m = arith.constant 24 : i32
     %pid = tt.get_program_id x : i32
     %0 = arith.cmpi slt, %pid, %aligned : i32
     %1 = scf.if %0 -> (i32) {
@@ -32,12 +32,12 @@ module attributes {"ttg.cluster-dim-x" = 1 : i32, "ttg.cluster-dim-y" = 1 : i32,
     } else {
       scf.yield %pid : i32
     }
-    %group_id = arith.divsi %1, %width : i32
-    %group_size = arith.subi %c1_i32, %group_id : i32
+    %group_id = arith.divsi %1, %c8_i32 : i32
+    %group_size = arith.subi %grid_m, %group_id : i32
     %group_size_2 = arith.minsi %group_size, %c1_i32 : i32
     %pid_m = arith.remsi %1, %group_size_2 : i32
     %pid_m_3 = arith.addi %group_id, %pid_m : i32
-    %pid_n = arith.remsi %1, %width : i32
+    %pid_n = arith.remsi %1, %c8_i32 : i32
     %pid_n_4 = arith.divsi %pid_n, %group_size_2 : i32
     %2 = arith.cmpi sge, %pid_m_3, %c0_i32 : i32
     llvm.intr.assume %2 : i1
@@ -64,7 +64,7 @@ module attributes {"ttg.cluster-dim-x" = 1 : i32, "ttg.cluster-dim-y" = 1 : i32,
     %b_offsets_20 = tt.broadcast %b_offsets_19 : tensor<1x256xi32> -> tensor<64x256xi32>
     %a = tt.splat %a_ptr : !tt.ptr<f16> -> tensor<128x64x!tt.ptr<f16>>
     %b = tt.splat %b_ptr : !tt.ptr<f16> -> tensor<64x256x!tt.ptr<f16>>
-    %acc_21 = scf.for %k = %c0_i32 to %c576_i32 step %c64_i32 iter_args(%acc_31 = %acc) -> (tensor<128x256xf32>)  : i32 {
+    %acc_21 = scf.for %k = %c0_i32 to %c1024_i32 step %c64_i32 iter_args(%acc_31 = %acc) -> (tensor<128x256xf32>)  : i32 {
       %a_offsets_32 = tt.splat %k : i32 -> tensor<1x64xi32>
       %a_offsets_33 = arith.addi %a_offsets_32, %a_offsets_16 : tensor<1x64xi32>
       %a_offsets_34 = tt.broadcast %a_offsets_33 : tensor<1x64xi32> -> tensor<128x64xi32>

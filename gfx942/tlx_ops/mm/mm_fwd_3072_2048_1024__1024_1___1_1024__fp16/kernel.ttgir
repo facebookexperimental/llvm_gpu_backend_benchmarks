@@ -6,24 +6,24 @@
 #smem = #ttg.shared_memory
 module attributes {"ttg.cluster-dim-x" = 1 : i32, "ttg.cluster-dim-y" = 1 : i32, "ttg.cluster-dim-z" = 1 : i32, "ttg.num-ctas" = 1 : i32, "ttg.num-warps" = 8 : i32, ttg.target = "hip:gfx942", "ttg.threads-per-warp" = 64 : i32} {
   tt.func public @matmul_kernel_gfx942(%a_ptr: !tt.ptr<f16> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %b_ptr: !tt.ptr<f16> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %bias_ptr: !tt.ptr<f16> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %c_ptr: !tt.ptr<f16> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}) attributes {noinline = false} {
-    %cst = arith.constant dense<61040> : tensor<128x1xi32, #mma>
-    %c7813120_i32 = arith.constant 7813120 : i32
-    %cst_0 = arith.constant dense<576> : tensor<1x256xi32, #blocked>
-    %cst_1 = arith.constant dense<576> : tensor<128x1xi32, #blocked1>
+    %cst = arith.constant dense<2048> : tensor<128x1xi32, #mma>
+    %c262144_i32 = arith.constant 262144 : i32
+    %cst_0 = arith.constant dense<1024> : tensor<1x256xi32, #blocked>
+    %cst_1 = arith.constant dense<1024> : tensor<128x1xi32, #blocked1>
     %acc = arith.constant dense<0.000000e+00> : tensor<128x256xf32, #mma>
-    %width = arith.constant 239 : i32
     %c64_i32 = arith.constant 64 : i32
     %aligned = arith.constant 192 : i32
     %c256_i32 = arith.constant 256 : i32
-    %c1_i32 = arith.constant 1 : i32
+    %grid_m = arith.constant 24 : i32
     %c8_i32 = arith.constant 8 : i32
+    %c1_i32 = arith.constant 1 : i32
     %c0_i32 = arith.constant 0 : i32
     %c128_i32 = arith.constant 128 : i32
-    %offs_m = arith.constant dense<128> : tensor<128xi32, #ttg.slice<{dim = 1, parent = #blocked1}>>
-    %offs_n = arith.constant dense<61040> : tensor<256xi32, #ttg.slice<{dim = 0, parent = #blocked}>>
-    %acc_2 = arith.constant 512 : i32
-    %mask = arith.constant dense<61040> : tensor<1x256xi32, #mma>
-    %mask_3 = arith.constant dense<128> : tensor<128x1xi32, #mma>
+    %offs_m = arith.constant dense<3072> : tensor<128xi32, #ttg.slice<{dim = 1, parent = #blocked1}>>
+    %offs_n = arith.constant dense<2048> : tensor<256xi32, #ttg.slice<{dim = 0, parent = #blocked}>>
+    %acc_2 = arith.constant 960 : i32
+    %mask = arith.constant dense<2048> : tensor<1x256xi32, #mma>
+    %mask_3 = arith.constant dense<3072> : tensor<128x1xi32, #mma>
     %pid = tt.get_program_id x : i32
     %0 = arith.cmpi slt, %pid, %aligned : i32
     %1 = scf.if %0 -> (i32) {
@@ -39,12 +39,12 @@ module attributes {"ttg.cluster-dim-x" = 1 : i32, "ttg.cluster-dim-y" = 1 : i32,
     } else {
       scf.yield %pid : i32
     }
-    %group_id = arith.divsi %1, %width : i32
-    %group_size = arith.subi %c1_i32, %group_id : i32
+    %group_id = arith.divsi %1, %c8_i32 : i32
+    %group_size = arith.subi %grid_m, %group_id : i32
     %group_size_4 = arith.minsi %group_size, %c1_i32 : i32
     %pid_m = arith.remsi %1, %group_size_4 : i32
     %pid_m_5 = arith.addi %group_id, %pid_m : i32
-    %pid_n = arith.remsi %1, %width : i32
+    %pid_n = arith.remsi %1, %c8_i32 : i32
     %pid_n_6 = arith.divsi %pid_n, %group_size_4 : i32
     %2 = arith.cmpi sge, %pid_m_5, %c0_i32 : i32
     llvm.intr.assume %2 : i1
@@ -150,7 +150,7 @@ module attributes {"ttg.cluster-dim-x" = 1 : i32, "ttg.cluster-dim-y" = 1 : i32,
     %mask_50 = tt.broadcast %mask_48 : tensor<1x256xi1, #mma> -> tensor<128x256xi1, #mma>
     %mask_51 = arith.andi %mask_49, %mask_50 : tensor<128x256xi1, #mma>
     %4 = tt.expand_dims %offs_m_9 {axis = 1 : i32} : tensor<128xi32, #ttg.slice<{dim = 1, parent = #mma}>> -> tensor<128x1xi32, #mma>
-    %5 = arith.muli %pid_m_5, %c7813120_i32 : i32
+    %5 = arith.muli %pid_m_5, %c262144_i32 : i32
     %6 = arith.muli %4, %cst : tensor<128x1xi32, #mma>
     %7 = tt.broadcast %6 : tensor<128x1xi32, #mma> -> tensor<128x256xi32, #mma>
     %8 = tt.expand_dims %offs_n_17 {axis = 0 : i32} : tensor<256xi32, #ttg.slice<{dim = 0, parent = #mma}>> -> tensor<1x256xi32, #mma>
