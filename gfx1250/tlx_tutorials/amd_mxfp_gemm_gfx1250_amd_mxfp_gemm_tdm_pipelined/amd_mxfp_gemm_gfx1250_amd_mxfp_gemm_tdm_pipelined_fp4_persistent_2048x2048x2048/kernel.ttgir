@@ -1,0 +1,581 @@
+#linear = #ttg.linear<{register = [[0, 1], [0, 2], [64, 0]], lane = [[1, 0], [2, 0], [4, 0], [8, 0], [16, 0]], warp = [[0, 0], [32, 0]], block = []}>
+#linear1 = #ttg.linear<{register = [[0, 1], [0, 2], [64, 0]], lane = [[1, 0], [2, 0], [4, 0], [8, 0], [16, 0]], warp = [[32, 0], [0, 0]], block = []}>
+#mma = #ttg.amd_wmma<{version = 3, isTranspose = true, ctaLayout = {register = [[0, 1], [1, 0]], warp = [[0, 2], [2, 0]]}, instrShape = [16, 16, 128]}>
+#mma1 = #ttg.amd_wmma<{version = 3, isTranspose = true, ctaLayout = {register = [[0, 1], [1, 0]], warp = [[0, 2], [2, 0]]}, instrShape = [16, 16, 64]}>
+#shared = #ttg.padded_shared<[256:+8] {order = [1, 0], shape = [2, 1024]}>
+#shared1 = #ttg.padded_shared<[256:+16] {order = [1, 0], shape = [256, 256]}>
+#shared2 = #ttg.padded_shared<[256:+16] {order = [1, 0], shape = [256, 128]}>
+#shared3 = #ttg.padded_shared<[128:+8] {order = [1, 0], shape = [128, 128]}>
+#shared4 = #ttg.padded_shared<[256:+8] {order = [4, 3, 2, 1, 0], shape = [2, 2, 32, 4, 4]}>
+#shared5 = #ttg.padded_shared<[256:+8] {order = [4, 1, 2, 3, 0], shape = [2, 4, 32, 2, 4]}>
+#shared6 = #ttg.padded_shared<[256:+8] {offset = [[0, 1], [0, 2], [32, 0], [64, 0], [1, 0], [2, 0], [4, 0], [8, 0], [16, 0], [0, 4], [128, 0]], block = []}>
+#shared7 = #ttg.padded_shared<[256:+16] {order = [0, 1], shape = [128, 256]}>
+#smem = #ttg.shared_memory
+module attributes {tlx.has_explicit_local_mem_access = true, tlx.has_tlx_ops = true, triton.skip_generic_pipeline, "ttg.cluster-dim-x" = 1 : i32, "ttg.cluster-dim-y" = 1 : i32, "ttg.cluster-dim-z" = 1 : i32, "ttg.num-ctas" = 1 : i32, "ttg.num-warps" = 4 : i32, ttg.target = "hip:gfx1250", "ttg.threads-per-warp" = 32 : i32} {
+  tt.func public @mxgemm_tdm_persistent_kernel(%a_ptr: !tt.ptr<f8E4M3FN> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %b_ptr: !tt.ptr<i8> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %c_ptr: !tt.ptr<f32> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %a_scale: !tt.ptr<i8> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %b_scale: !tt.ptr<i8> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}) attributes {noinline = false} {
+    %c0_i32 = arith.constant 0 : i32
+    %c1_i64 = arith.constant 1 : i64
+    %c8192_i64 = arith.constant 8192 : i64
+    %c8192_i32 = arith.constant 8192 : i32
+    %c16_i32 = arith.constant 16 : i32
+    %c2048_i32 = arith.constant 2048 : i32
+    %c2048_i64 = arith.constant 2048 : i64
+    %c1024_i32 = arith.constant 1024 : i32
+    %b_desc = arith.constant 1024 : i64
+    %c8_i32 = arith.constant 8 : i32
+    %c3_i32 = arith.constant 3 : i32
+    %c1_i32 = arith.constant 1 : i32
+    %c2_i32 = arith.constant 2 : i32
+    %c64_i32 = arith.constant 64 : i32
+    %c128_i32 = arith.constant 128 : i32
+    %true = arith.constant true
+    %c5_i32 = arith.constant 5 : i32
+    %c63_i32 = arith.constant 63 : i32
+    %c6_i32 = arith.constant 6 : i32
+    %c7_i32 = arith.constant 7 : i32
+    %c256_i32 = arith.constant 256 : i32
+    %c512_i32 = arith.constant 512 : i32
+    %cst = arith.constant dense<0.000000e+00> : tensor<128x128xf32, #mma>
+    %as_desc = tt.make_tensor_descriptor %a_scale, [%c16_i32, %c8192_i32], [%c8192_i64, %c1_i64] : !tt.ptr<i8>, !tt.tensordesc<2x1024xui8, #shared>
+    %bs_desc = tt.make_tensor_descriptor %b_scale, [%c16_i32, %c8192_i32], [%c8192_i64, %c1_i64] : !tt.ptr<i8>, !tt.tensordesc<2x1024xui8, #shared>
+    %a_desc = tt.make_tensor_descriptor %a_ptr, [%c2048_i32, %c2048_i32], [%c2048_i64, %c1_i64] : !tt.ptr<f8E4M3FN>, !tt.tensordesc<256x256xf8E4M3FN, #shared1>
+    %b_desc_0 = tt.make_tensor_descriptor %b_ptr, [%c2048_i32, %c1024_i32], [%b_desc, %c1_i64] : !tt.ptr<i8>, !tt.tensordesc<256x128xui8, #shared2>
+    %a_buf = ttg.local_alloc : () -> !ttg.memdesc<3x256x256xf8E4M3FN, #shared1, #smem, mutable>
+    %b_buf = ttg.local_alloc : () -> !ttg.memdesc<3x256x128xi8, #shared2, #smem, mutable>
+    %as_buf = ttg.local_alloc : () -> !ttg.memdesc<3x2x1024xi8, #shared, #smem, mutable>
+    %bs_buf = ttg.local_alloc : () -> !ttg.memdesc<3x2x1024xi8, #shared, #smem, mutable>
+    %a_buf_1 = ttg.memdesc_reinterpret %a_buf {tlx.storage_alias_view} : !ttg.memdesc<3x256x256xf8E4M3FN, #shared1, #smem, mutable> -> !ttg.memdesc<3x128x128xf32, #shared3, #smem, mutable>
+    llvm.intr.assume %true : i1
+    %tile = tt.get_program_id x : i32
+    %group = arith.divsi %tile, %c64_i32 : i32
+    %first_m = arith.muli %group, %c8_i32 : i32
+    %group_m = arith.subi %c8_i32, %first_m : i32
+    %group_m_2 = arith.minsi %group_m, %c8_i32 : i32
+    %local = arith.remsi %tile, %c64_i32 : i32
+    %0 = arith.remsi %local, %group_m_2 : i32
+    %1 = arith.addi %first_m, %0 : i32
+    %2 = arith.muli %1, %c256_i32 : i32
+    %3 = arith.divsi %local, %group_m_2 : i32
+    %4 = arith.muli %3, %c256_i32 : i32
+    %ad = amdg.update_tensor_descriptor %a_desc add_offsets = [%2, %c0_i32] : !tt.tensordesc<256x256xf8E4M3FN, #shared1>
+    %bd = amdg.update_tensor_descriptor %b_desc_0 add_offsets = [%4, %c0_i32] : !tt.tensordesc<256x128xui8, #shared2>
+    %asd = arith.divsi %2, %c128_i32 : i32
+    %asd_3 = amdg.update_tensor_descriptor %as_desc add_offsets = [%asd, %c0_i32] : !tt.tensordesc<2x1024xui8, #shared>
+    %bsd = arith.divsi %4, %c128_i32 : i32
+    %bsd_4 = amdg.update_tensor_descriptor %bs_desc add_offsets = [%bsd, %c0_i32] : !tt.tensordesc<2x1024xui8, #shared>
+    %5 = amdg.update_tensor_descriptor %ad add_offsets = [%c0_i32, %c0_i32] : !tt.tensordesc<256x256xf8E4M3FN, #shared1>
+    %6 = ttg.memdesc_index %a_buf[%c0_i32] : !ttg.memdesc<3x256x256xf8E4M3FN, #shared1, #smem, mutable> -> !ttg.memdesc<256x256xf8E4M3FN, #shared1, #smem, mutable>
+    %7 = amdg.update_tensor_descriptor %bd add_offsets = [%c0_i32, %c0_i32] : !tt.tensordesc<256x128xui8, #shared2>
+    %8 = ttg.memdesc_index %b_buf[%c0_i32] : !ttg.memdesc<3x256x128xi8, #shared2, #smem, mutable> -> !ttg.memdesc<256x128xi8, #shared2, #smem, mutable>
+    %9 = amdg.async_tdm_fused_copy_global_to_local %5, %7 into %6, %8 {warp_used_hints = array<i32: 5, 10>} : !tt.tensordesc<256x256xf8E4M3FN, #shared1>, !tt.tensordesc<256x128xui8, #shared2> -> !ttg.memdesc<256x256xf8E4M3FN, #shared1, #smem, mutable>, !ttg.memdesc<256x128xi8, #shared2, #smem, mutable>
+    %10 = amdg.update_tensor_descriptor %asd_3 add_offsets = [%c0_i32, %c0_i32] : !tt.tensordesc<2x1024xui8, #shared>
+    %11 = ttg.memdesc_index %as_buf[%c0_i32] : !ttg.memdesc<3x2x1024xi8, #shared, #smem, mutable> -> !ttg.memdesc<2x1024xi8, #shared, #smem, mutable>
+    %12 = amdg.update_tensor_descriptor %bsd_4 add_offsets = [%c0_i32, %c0_i32] : !tt.tensordesc<2x1024xui8, #shared>
+    %13 = ttg.memdesc_index %bs_buf[%c0_i32] : !ttg.memdesc<3x2x1024xi8, #shared, #smem, mutable> -> !ttg.memdesc<2x1024xi8, #shared, #smem, mutable>
+    %14 = amdg.async_tdm_fused_copy_global_to_local %10, %12 into %11, %13 {warp_used_hints = array<i32: 5, 10>} : !tt.tensordesc<2x1024xui8, #shared>, !tt.tensordesc<2x1024xui8, #shared> -> !ttg.memdesc<2x1024xi8, #shared, #smem, mutable>, !ttg.memdesc<2x1024xi8, #shared, #smem, mutable>
+    %15 = amdg.update_tensor_descriptor %ad add_offsets = [%c0_i32, %c256_i32] : !tt.tensordesc<256x256xf8E4M3FN, #shared1>
+    %16 = ttg.memdesc_index %a_buf[%c1_i32] : !ttg.memdesc<3x256x256xf8E4M3FN, #shared1, #smem, mutable> -> !ttg.memdesc<256x256xf8E4M3FN, #shared1, #smem, mutable>
+    %17 = amdg.update_tensor_descriptor %bd add_offsets = [%c0_i32, %c128_i32] : !tt.tensordesc<256x128xui8, #shared2>
+    %18 = ttg.memdesc_index %b_buf[%c1_i32] : !ttg.memdesc<3x256x128xi8, #shared2, #smem, mutable> -> !ttg.memdesc<256x128xi8, #shared2, #smem, mutable>
+    %19 = amdg.async_tdm_fused_copy_global_to_local %15, %17 into %16, %18 {warp_used_hints = array<i32: 5, 10>} : !tt.tensordesc<256x256xf8E4M3FN, #shared1>, !tt.tensordesc<256x128xui8, #shared2> -> !ttg.memdesc<256x256xf8E4M3FN, #shared1, #smem, mutable>, !ttg.memdesc<256x128xi8, #shared2, #smem, mutable>
+    %20 = amdg.update_tensor_descriptor %asd_3 add_offsets = [%c0_i32, %c1024_i32] : !tt.tensordesc<2x1024xui8, #shared>
+    %21 = ttg.memdesc_index %as_buf[%c1_i32] : !ttg.memdesc<3x2x1024xi8, #shared, #smem, mutable> -> !ttg.memdesc<2x1024xi8, #shared, #smem, mutable>
+    %22 = amdg.update_tensor_descriptor %bsd_4 add_offsets = [%c0_i32, %c1024_i32] : !tt.tensordesc<2x1024xui8, #shared>
+    %23 = ttg.memdesc_index %bs_buf[%c1_i32] : !ttg.memdesc<3x2x1024xi8, #shared, #smem, mutable> -> !ttg.memdesc<2x1024xi8, #shared, #smem, mutable>
+    %24 = amdg.async_tdm_fused_copy_global_to_local %20, %22 into %21, %23 {warp_used_hints = array<i32: 5, 10>} : !tt.tensordesc<2x1024xui8, #shared>, !tt.tensordesc<2x1024xui8, #shared> -> !ttg.memdesc<2x1024xi8, #shared, #smem, mutable>, !ttg.memdesc<2x1024xi8, #shared, #smem, mutable>
+    %25 = amdg.update_tensor_descriptor %ad add_offsets = [%c0_i32, %c512_i32] : !tt.tensordesc<256x256xf8E4M3FN, #shared1>
+    %26 = ttg.memdesc_index %a_buf[%c2_i32] : !ttg.memdesc<3x256x256xf8E4M3FN, #shared1, #smem, mutable> -> !ttg.memdesc<256x256xf8E4M3FN, #shared1, #smem, mutable>
+    %27 = amdg.update_tensor_descriptor %bd add_offsets = [%c0_i32, %c256_i32] : !tt.tensordesc<256x128xui8, #shared2>
+    %28 = ttg.memdesc_index %b_buf[%c2_i32] : !ttg.memdesc<3x256x128xi8, #shared2, #smem, mutable> -> !ttg.memdesc<256x128xi8, #shared2, #smem, mutable>
+    %29 = amdg.async_tdm_fused_copy_global_to_local %25, %27 into %26, %28 {warp_used_hints = array<i32: 5, 10>} : !tt.tensordesc<256x256xf8E4M3FN, #shared1>, !tt.tensordesc<256x128xui8, #shared2> -> !ttg.memdesc<256x256xf8E4M3FN, #shared1, #smem, mutable>, !ttg.memdesc<256x128xi8, #shared2, #smem, mutable>
+    %30 = amdg.update_tensor_descriptor %asd_3 add_offsets = [%c0_i32, %c2048_i32] : !tt.tensordesc<2x1024xui8, #shared>
+    %31 = ttg.memdesc_index %as_buf[%c2_i32] : !ttg.memdesc<3x2x1024xi8, #shared, #smem, mutable> -> !ttg.memdesc<2x1024xi8, #shared, #smem, mutable>
+    %32 = amdg.update_tensor_descriptor %bsd_4 add_offsets = [%c0_i32, %c2048_i32] : !tt.tensordesc<2x1024xui8, #shared>
+    %33 = ttg.memdesc_index %bs_buf[%c2_i32] : !ttg.memdesc<3x2x1024xi8, #shared, #smem, mutable> -> !ttg.memdesc<2x1024xi8, #shared, #smem, mutable>
+    %34 = amdg.async_tdm_fused_copy_global_to_local %30, %32 into %31, %33 {warp_used_hints = array<i32: 5, 10>} : !tt.tensordesc<2x1024xui8, #shared>, !tt.tensordesc<2x1024xui8, #shared> -> !ttg.memdesc<2x1024xi8, #shared, #smem, mutable>, !ttg.memdesc<2x1024xi8, #shared, #smem, mutable>
+    %view = ttg.memdesc_index %a_buf_1[%c0_i32] : !ttg.memdesc<3x128x128xf32, #shared3, #smem, mutable> -> !ttg.memdesc<128x128xf32, #shared3, #smem, mutable>
+    %view_5 = ttg.memdesc_index %a_buf_1[%c1_i32] : !ttg.memdesc<3x128x128xf32, #shared3, #smem, mutable> -> !ttg.memdesc<128x128xf32, #shared3, #smem, mutable>
+    %view_6 = ttg.memdesc_index %a_buf_1[%c2_i32] : !ttg.memdesc<3x128x128xf32, #shared3, #smem, mutable> -> !ttg.memdesc<128x128xf32, #shared3, #smem, mutable>
+    %off_n = scf.for %off_n_7 = %tile to %c64_i32 step %c64_i32 iter_args(%arg6 = %c0_i32) -> (i32)  : i32 {
+      %group_8 = arith.divsi %off_n_7, %c64_i32 : i32
+      %first_m_9 = arith.muli %group_8, %c8_i32 : i32
+      %group_m_10 = arith.subi %c8_i32, %first_m_9 : i32
+      %group_m_11 = arith.minsi %group_m_10, %c8_i32 : i32
+      %local_12 = arith.remsi %off_n_7, %c64_i32 : i32
+      %36 = arith.remsi %local_12, %group_m_11 : i32
+      %37 = arith.addi %first_m_9, %36 : i32
+      %38 = arith.muli %37, %c256_i32 : i32
+      %39 = arith.divsi %local_12, %group_m_11 : i32
+      %40 = arith.muli %39, %c256_i32 : i32
+      %41 = amdg.async_tdm_wait  {num = 4 : i32}
+      %42 = arith.cmpi sge, %arg6, %c0_i32 : i32
+      llvm.intr.assume %42 : i1
+      %43 = arith.cmpi slt, %arg6, %c3_i32 : i32
+      llvm.intr.assume %43 : i1
+      %slot = arith.remsi %arg6, %c3_i32 : i32
+      %a_view = ttg.memdesc_index %a_buf[%slot] : !ttg.memdesc<3x256x256xf8E4M3FN, #shared1, #smem, mutable> -> !ttg.memdesc<256x256xf8E4M3FN, #shared1, #smem, mutable>
+      %a_view_13 = ttg.memdesc_subslice %a_view[0, 0] : !ttg.memdesc<256x256xf8E4M3FN, #shared1, #smem, mutable> -> !ttg.memdesc<128x128xf8E4M3FN, #shared1, #smem, mutable, 256x256>
+      %a = ttg.local_load %a_view_13 : !ttg.memdesc<128x128xf8E4M3FN, #shared1, #smem, mutable, 256x256> -> tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>
+      %scale_a_view = ttg.memdesc_index %as_buf[%slot] : !ttg.memdesc<3x2x1024xi8, #shared, #smem, mutable> -> !ttg.memdesc<2x1024xi8, #shared, #smem, mutable>
+      %scale_a_view_14 = ttg.memdesc_reshape %scale_a_view : !ttg.memdesc<2x1024xi8, #shared, #smem, mutable> -> !ttg.memdesc<2x2x32x4x4xi8, #shared4, #smem, mutable>
+      %scale_a_view_15 = ttg.memdesc_trans %scale_a_view_14 {order = array<i32: 0, 3, 2, 1, 4>} : !ttg.memdesc<2x2x32x4x4xi8, #shared4, #smem, mutable> -> !ttg.memdesc<2x4x32x2x4xi8, #shared5, #smem, mutable>
+      %scale_a_view_16 = ttg.memdesc_reshape %scale_a_view_15 : !ttg.memdesc<2x4x32x2x4xi8, #shared5, #smem, mutable> -> !ttg.memdesc<256x8xi8, #shared6, #smem, mutable>
+      %scale_a_view_17 = ttg.memdesc_subslice %scale_a_view_16[0, 0] : !ttg.memdesc<256x8xi8, #shared6, #smem, mutable> -> !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8>
+      %scale_a = ttg.local_load %scale_a_view_17 : !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8> -> tensor<128x4xi8, #linear>
+      llvm.intr.assume %42 : i1
+      llvm.intr.assume %43 : i1
+      %b_view = ttg.memdesc_index %b_buf[%slot] : !ttg.memdesc<3x256x128xi8, #shared2, #smem, mutable> -> !ttg.memdesc<256x128xi8, #shared2, #smem, mutable>
+      %b_view_18 = ttg.memdesc_subslice %b_view[0, 0] : !ttg.memdesc<256x128xi8, #shared2, #smem, mutable> -> !ttg.memdesc<128x64xi8, #shared2, #smem, mutable, 256x128>
+      %b_view_19 = ttg.memdesc_trans %b_view_18 {order = array<i32: 1, 0>} : !ttg.memdesc<128x64xi8, #shared2, #smem, mutable, 256x128> -> !ttg.memdesc<64x128xi8, #shared7, #smem, mutable, 128x256>
+      %b = ttg.local_load %b_view_19 : !ttg.memdesc<64x128xi8, #shared7, #smem, mutable, 128x256> -> tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>
+      %scale_b_view = ttg.memdesc_index %bs_buf[%slot] : !ttg.memdesc<3x2x1024xi8, #shared, #smem, mutable> -> !ttg.memdesc<2x1024xi8, #shared, #smem, mutable>
+      %scale_b_view_20 = ttg.memdesc_reshape %scale_b_view : !ttg.memdesc<2x1024xi8, #shared, #smem, mutable> -> !ttg.memdesc<2x2x32x4x4xi8, #shared4, #smem, mutable>
+      %scale_b_view_21 = ttg.memdesc_trans %scale_b_view_20 {order = array<i32: 0, 3, 2, 1, 4>} : !ttg.memdesc<2x2x32x4x4xi8, #shared4, #smem, mutable> -> !ttg.memdesc<2x4x32x2x4xi8, #shared5, #smem, mutable>
+      %scale_b_view_22 = ttg.memdesc_reshape %scale_b_view_21 : !ttg.memdesc<2x4x32x2x4xi8, #shared5, #smem, mutable> -> !ttg.memdesc<256x8xi8, #shared6, #smem, mutable>
+      %scale_b_view_23 = ttg.memdesc_subslice %scale_b_view_22[0, 0] : !ttg.memdesc<256x8xi8, #shared6, #smem, mutable> -> !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8>
+      %scale_b = ttg.local_load %scale_b_view_23 : !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8> -> tensor<128x4xi8, #linear1>
+      %ad_24 = amdg.update_tensor_descriptor %a_desc add_offsets = [%38, %c0_i32] : !tt.tensordesc<256x256xf8E4M3FN, #shared1>
+      %bd_25 = amdg.update_tensor_descriptor %b_desc_0 add_offsets = [%40, %c0_i32] : !tt.tensordesc<256x128xui8, #shared2>
+      %asd_26 = arith.divsi %38, %c128_i32 : i32
+      %asd_27 = amdg.update_tensor_descriptor %as_desc add_offsets = [%asd_26, %c0_i32] : !tt.tensordesc<2x1024xui8, #shared>
+      %bsd_28 = arith.divsi %40, %c128_i32 : i32
+      %bsd_29 = amdg.update_tensor_descriptor %bs_desc add_offsets = [%bsd_28, %c0_i32] : !tt.tensordesc<2x1024xui8, #shared>
+      %slot_30:9 = scf.for %i = %c0_i32 to %c5_i32 step %c1_i32 iter_args(%c00_209 = %cst, %c01_210 = %cst, %c10_211 = %cst, %c11_212 = %cst, %a00 = %a, %sa00 = %scale_a, %b00 = %b, %sb00 = %scale_b, %slot_213 = %arg6) -> (tensor<128x128xf32, #mma>, tensor<128x128xf32, #mma>, tensor<128x128xf32, #mma>, tensor<128x128xf32, #mma>, tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>, tensor<128x4xi8, #linear>, tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>, tensor<128x4xi8, #linear1>, i32)  : i32 {
+        %72 = arith.cmpi sge, %slot_213, %c0_i32 : i32
+        llvm.intr.assume %72 : i1
+        %73 = arith.cmpi slt, %slot_213, %c3_i32 : i32
+        llvm.intr.assume %73 : i1
+        %next_slot_214 = arith.cmpi eq, %slot_213, %c2_i32 : i32
+        %next_slot_215 = arith.addi %slot_213, %c1_i32 : i32
+        %next_slot_216 = arith.select %next_slot_214, %c0_i32, %next_slot_215 : i32
+        %c00_217 = tt.dot_scaled %a00 scale %sa00, %b00 scale %sb00, %c00_209 lhs = e4m3 rhs = e2m1 {fastMath = false} : tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>, tensor<128x4xi8, #linear> * tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>, tensor<128x4xi8, #linear1> -> tensor<128x128xf32, #mma>
+        llvm.intr.assume %72 : i1
+        llvm.intr.assume %73 : i1
+        %slot_218 = arith.remsi %slot_213, %c3_i32 : i32
+        %b_view_219 = ttg.memdesc_index %b_buf[%slot_218] : !ttg.memdesc<3x256x128xi8, #shared2, #smem, mutable> -> !ttg.memdesc<256x128xi8, #shared2, #smem, mutable>
+        %b_view_220 = ttg.memdesc_subslice %b_view_219[128, 0] : !ttg.memdesc<256x128xi8, #shared2, #smem, mutable> -> !ttg.memdesc<128x64xi8, #shared2, #smem, mutable, 256x128>
+        %b_view_221 = ttg.memdesc_trans %b_view_220 {order = array<i32: 1, 0>} : !ttg.memdesc<128x64xi8, #shared2, #smem, mutable, 256x128> -> !ttg.memdesc<64x128xi8, #shared7, #smem, mutable, 128x256>
+        %b_222 = ttg.local_load %b_view_221 : !ttg.memdesc<64x128xi8, #shared7, #smem, mutable, 128x256> -> tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>
+        %scale_b_view_223 = ttg.memdesc_index %bs_buf[%slot_218] : !ttg.memdesc<3x2x1024xi8, #shared, #smem, mutable> -> !ttg.memdesc<2x1024xi8, #shared, #smem, mutable>
+        %scale_b_view_224 = ttg.memdesc_reshape %scale_b_view_223 : !ttg.memdesc<2x1024xi8, #shared, #smem, mutable> -> !ttg.memdesc<2x2x32x4x4xi8, #shared4, #smem, mutable>
+        %scale_b_view_225 = ttg.memdesc_trans %scale_b_view_224 {order = array<i32: 0, 3, 2, 1, 4>} : !ttg.memdesc<2x2x32x4x4xi8, #shared4, #smem, mutable> -> !ttg.memdesc<2x4x32x2x4xi8, #shared5, #smem, mutable>
+        %scale_b_view_226 = ttg.memdesc_reshape %scale_b_view_225 : !ttg.memdesc<2x4x32x2x4xi8, #shared5, #smem, mutable> -> !ttg.memdesc<256x8xi8, #shared6, #smem, mutable>
+        %scale_b_view_227 = ttg.memdesc_subslice %scale_b_view_226[128, 0] : !ttg.memdesc<256x8xi8, #shared6, #smem, mutable> -> !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8>
+        %scale_b_228 = ttg.local_load %scale_b_view_227 : !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8> -> tensor<128x4xi8, #linear1>
+        %c01_229 = tt.dot_scaled %a00 scale %sa00, %b_222 scale %scale_b_228, %c01_210 lhs = e4m3 rhs = e2m1 {fastMath = false} : tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>, tensor<128x4xi8, #linear> * tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>, tensor<128x4xi8, #linear1> -> tensor<128x128xf32, #mma>
+        llvm.intr.assume %72 : i1
+        llvm.intr.assume %73 : i1
+        %a_view_230 = ttg.memdesc_index %a_buf[%slot_218] : !ttg.memdesc<3x256x256xf8E4M3FN, #shared1, #smem, mutable> -> !ttg.memdesc<256x256xf8E4M3FN, #shared1, #smem, mutable>
+        %a_view_231 = ttg.memdesc_subslice %a_view_230[128, 0] : !ttg.memdesc<256x256xf8E4M3FN, #shared1, #smem, mutable> -> !ttg.memdesc<128x128xf8E4M3FN, #shared1, #smem, mutable, 256x256>
+        %a_232 = ttg.local_load %a_view_231 : !ttg.memdesc<128x128xf8E4M3FN, #shared1, #smem, mutable, 256x256> -> tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>
+        %scale_a_view_233 = ttg.memdesc_index %as_buf[%slot_218] : !ttg.memdesc<3x2x1024xi8, #shared, #smem, mutable> -> !ttg.memdesc<2x1024xi8, #shared, #smem, mutable>
+        %scale_a_view_234 = ttg.memdesc_reshape %scale_a_view_233 : !ttg.memdesc<2x1024xi8, #shared, #smem, mutable> -> !ttg.memdesc<2x2x32x4x4xi8, #shared4, #smem, mutable>
+        %scale_a_view_235 = ttg.memdesc_trans %scale_a_view_234 {order = array<i32: 0, 3, 2, 1, 4>} : !ttg.memdesc<2x2x32x4x4xi8, #shared4, #smem, mutable> -> !ttg.memdesc<2x4x32x2x4xi8, #shared5, #smem, mutable>
+        %scale_a_view_236 = ttg.memdesc_reshape %scale_a_view_235 : !ttg.memdesc<2x4x32x2x4xi8, #shared5, #smem, mutable> -> !ttg.memdesc<256x8xi8, #shared6, #smem, mutable>
+        %scale_a_view_237 = ttg.memdesc_subslice %scale_a_view_236[128, 0] : !ttg.memdesc<256x8xi8, #shared6, #smem, mutable> -> !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8>
+        %scale_a_238 = ttg.local_load %scale_a_view_237 : !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8> -> tensor<128x4xi8, #linear>
+        %c10_239 = tt.dot_scaled %a_232 scale %scale_a_238, %b00 scale %sb00, %c10_211 lhs = e4m3 rhs = e2m1 {fastMath = false} : tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>, tensor<128x4xi8, #linear> * tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>, tensor<128x4xi8, #linear1> -> tensor<128x128xf32, #mma>
+        llvm.intr.assume %72 : i1
+        llvm.intr.assume %73 : i1
+        %b_view_240 = ttg.memdesc_subslice %b_view_219[0, 64] : !ttg.memdesc<256x128xi8, #shared2, #smem, mutable> -> !ttg.memdesc<128x64xi8, #shared2, #smem, mutable, 256x128>
+        %b_view_241 = ttg.memdesc_trans %b_view_240 {order = array<i32: 1, 0>} : !ttg.memdesc<128x64xi8, #shared2, #smem, mutable, 256x128> -> !ttg.memdesc<64x128xi8, #shared7, #smem, mutable, 128x256>
+        %b_242 = ttg.local_load %b_view_241 : !ttg.memdesc<64x128xi8, #shared7, #smem, mutable, 128x256> -> tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>
+        %scale_b_view_243 = ttg.memdesc_subslice %scale_b_view_226[0, 4] : !ttg.memdesc<256x8xi8, #shared6, #smem, mutable> -> !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8>
+        %scale_b_244 = ttg.local_load %scale_b_view_243 : !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8> -> tensor<128x4xi8, #linear1>
+        llvm.intr.assume %72 : i1
+        llvm.intr.assume %73 : i1
+        %a_view_245 = ttg.memdesc_subslice %a_view_230[0, 128] : !ttg.memdesc<256x256xf8E4M3FN, #shared1, #smem, mutable> -> !ttg.memdesc<128x128xf8E4M3FN, #shared1, #smem, mutable, 256x256>
+        %a_246 = ttg.local_load %a_view_245 : !ttg.memdesc<128x128xf8E4M3FN, #shared1, #smem, mutable, 256x256> -> tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>
+        %scale_a_view_247 = ttg.memdesc_subslice %scale_a_view_236[0, 4] : !ttg.memdesc<256x8xi8, #shared6, #smem, mutable> -> !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8>
+        %scale_a_248 = ttg.local_load %scale_a_view_247 : !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8> -> tensor<128x4xi8, #linear>
+        rocdl.sched.barrier none
+        llvm.intr.assume %72 : i1
+        llvm.intr.assume %73 : i1
+        %b_view_249 = ttg.memdesc_subslice %b_view_219[128, 64] : !ttg.memdesc<256x128xi8, #shared2, #smem, mutable> -> !ttg.memdesc<128x64xi8, #shared2, #smem, mutable, 256x128>
+        %b_view_250 = ttg.memdesc_trans %b_view_249 {order = array<i32: 1, 0>} : !ttg.memdesc<128x64xi8, #shared2, #smem, mutable, 256x128> -> !ttg.memdesc<64x128xi8, #shared7, #smem, mutable, 128x256>
+        %b_251 = ttg.local_load %b_view_250 : !ttg.memdesc<64x128xi8, #shared7, #smem, mutable, 128x256> -> tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>
+        %scale_b_view_252 = ttg.memdesc_subslice %scale_b_view_226[128, 4] : !ttg.memdesc<256x8xi8, #shared6, #smem, mutable> -> !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8>
+        %scale_b_253 = ttg.local_load %scale_b_view_252 : !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8> -> tensor<128x4xi8, #linear1>
+        llvm.intr.assume %72 : i1
+        llvm.intr.assume %73 : i1
+        %a_view_254 = ttg.memdesc_subslice %a_view_230[128, 128] : !ttg.memdesc<256x256xf8E4M3FN, #shared1, #smem, mutable> -> !ttg.memdesc<128x128xf8E4M3FN, #shared1, #smem, mutable, 256x256>
+        %a_255 = ttg.local_load %a_view_254 : !ttg.memdesc<128x128xf8E4M3FN, #shared1, #smem, mutable, 256x256> -> tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>
+        %scale_a_view_256 = ttg.memdesc_subslice %scale_a_view_236[128, 4] : !ttg.memdesc<256x8xi8, #shared6, #smem, mutable> -> !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8>
+        %scale_a_257 = ttg.local_load %scale_a_view_256 : !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8> -> tensor<128x4xi8, #linear>
+        rocdl.sched.barrier none
+        %74 = arith.addi %i, %c3_i32 : i32
+        %b_offsets = arith.muli %74, %c128_i32 : i32
+        %scale_offsets = arith.muli %74, %c1024_i32 : i32
+        %75 = arith.muli %74, %c256_i32 : i32
+        %76 = amdg.update_tensor_descriptor %ad_24 add_offsets = [%c0_i32, %75] : !tt.tensordesc<256x256xf8E4M3FN, #shared1>
+        %77 = ttg.memdesc_index %a_buf[%slot_213] : !ttg.memdesc<3x256x256xf8E4M3FN, #shared1, #smem, mutable> -> !ttg.memdesc<256x256xf8E4M3FN, #shared1, #smem, mutable>
+        %78 = amdg.update_tensor_descriptor %bd_25 add_offsets = [%c0_i32, %b_offsets] : !tt.tensordesc<256x128xui8, #shared2>
+        %79 = ttg.memdesc_index %b_buf[%slot_213] : !ttg.memdesc<3x256x128xi8, #shared2, #smem, mutable> -> !ttg.memdesc<256x128xi8, #shared2, #smem, mutable>
+        %80 = amdg.async_tdm_fused_copy_global_to_local %76, %78 into %77, %79 {warp_used_hints = array<i32: 5, 10>} : !tt.tensordesc<256x256xf8E4M3FN, #shared1>, !tt.tensordesc<256x128xui8, #shared2> -> !ttg.memdesc<256x256xf8E4M3FN, #shared1, #smem, mutable>, !ttg.memdesc<256x128xi8, #shared2, #smem, mutable>
+        %81 = amdg.update_tensor_descriptor %asd_27 add_offsets = [%c0_i32, %scale_offsets] : !tt.tensordesc<2x1024xui8, #shared>
+        %82 = ttg.memdesc_index %as_buf[%slot_213] : !ttg.memdesc<3x2x1024xi8, #shared, #smem, mutable> -> !ttg.memdesc<2x1024xi8, #shared, #smem, mutable>
+        %83 = amdg.update_tensor_descriptor %bsd_29 add_offsets = [%c0_i32, %scale_offsets] : !tt.tensordesc<2x1024xui8, #shared>
+        %84 = ttg.memdesc_index %bs_buf[%slot_213] : !ttg.memdesc<3x2x1024xi8, #shared, #smem, mutable> -> !ttg.memdesc<2x1024xi8, #shared, #smem, mutable>
+        %85 = amdg.async_tdm_fused_copy_global_to_local %81, %83 into %82, %84 {warp_used_hints = array<i32: 5, 10>} : !tt.tensordesc<2x1024xui8, #shared>, !tt.tensordesc<2x1024xui8, #shared> -> !ttg.memdesc<2x1024xi8, #shared, #smem, mutable>, !ttg.memdesc<2x1024xi8, #shared, #smem, mutable>
+        %86 = amdg.async_tdm_wait  {num = 4 : i32}
+        %87 = arith.cmpi sge, %next_slot_216, %c0_i32 : i32
+        llvm.intr.assume %87 : i1
+        %88 = arith.cmpi slt, %next_slot_216, %c3_i32 : i32
+        llvm.intr.assume %88 : i1
+        %slot_258 = arith.remsi %next_slot_216, %c3_i32 : i32
+        %a_view_259 = ttg.memdesc_index %a_buf[%slot_258] : !ttg.memdesc<3x256x256xf8E4M3FN, #shared1, #smem, mutable> -> !ttg.memdesc<256x256xf8E4M3FN, #shared1, #smem, mutable>
+        %a_view_260 = ttg.memdesc_subslice %a_view_259[0, 0] : !ttg.memdesc<256x256xf8E4M3FN, #shared1, #smem, mutable> -> !ttg.memdesc<128x128xf8E4M3FN, #shared1, #smem, mutable, 256x256>
+        %a_261 = ttg.local_load %a_view_260 : !ttg.memdesc<128x128xf8E4M3FN, #shared1, #smem, mutable, 256x256> -> tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>
+        %scale_a_view_262 = ttg.memdesc_index %as_buf[%slot_258] : !ttg.memdesc<3x2x1024xi8, #shared, #smem, mutable> -> !ttg.memdesc<2x1024xi8, #shared, #smem, mutable>
+        %scale_a_view_263 = ttg.memdesc_reshape %scale_a_view_262 : !ttg.memdesc<2x1024xi8, #shared, #smem, mutable> -> !ttg.memdesc<2x2x32x4x4xi8, #shared4, #smem, mutable>
+        %scale_a_view_264 = ttg.memdesc_trans %scale_a_view_263 {order = array<i32: 0, 3, 2, 1, 4>} : !ttg.memdesc<2x2x32x4x4xi8, #shared4, #smem, mutable> -> !ttg.memdesc<2x4x32x2x4xi8, #shared5, #smem, mutable>
+        %scale_a_view_265 = ttg.memdesc_reshape %scale_a_view_264 : !ttg.memdesc<2x4x32x2x4xi8, #shared5, #smem, mutable> -> !ttg.memdesc<256x8xi8, #shared6, #smem, mutable>
+        %scale_a_view_266 = ttg.memdesc_subslice %scale_a_view_265[0, 0] : !ttg.memdesc<256x8xi8, #shared6, #smem, mutable> -> !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8>
+        %scale_a_267 = ttg.local_load %scale_a_view_266 : !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8> -> tensor<128x4xi8, #linear>
+        llvm.intr.assume %87 : i1
+        llvm.intr.assume %88 : i1
+        %b_view_268 = ttg.memdesc_index %b_buf[%slot_258] : !ttg.memdesc<3x256x128xi8, #shared2, #smem, mutable> -> !ttg.memdesc<256x128xi8, #shared2, #smem, mutable>
+        %b_view_269 = ttg.memdesc_subslice %b_view_268[0, 0] : !ttg.memdesc<256x128xi8, #shared2, #smem, mutable> -> !ttg.memdesc<128x64xi8, #shared2, #smem, mutable, 256x128>
+        %b_view_270 = ttg.memdesc_trans %b_view_269 {order = array<i32: 1, 0>} : !ttg.memdesc<128x64xi8, #shared2, #smem, mutable, 256x128> -> !ttg.memdesc<64x128xi8, #shared7, #smem, mutable, 128x256>
+        %b_271 = ttg.local_load %b_view_270 : !ttg.memdesc<64x128xi8, #shared7, #smem, mutable, 128x256> -> tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>
+        %scale_b_view_272 = ttg.memdesc_index %bs_buf[%slot_258] : !ttg.memdesc<3x2x1024xi8, #shared, #smem, mutable> -> !ttg.memdesc<2x1024xi8, #shared, #smem, mutable>
+        %scale_b_view_273 = ttg.memdesc_reshape %scale_b_view_272 : !ttg.memdesc<2x1024xi8, #shared, #smem, mutable> -> !ttg.memdesc<2x2x32x4x4xi8, #shared4, #smem, mutable>
+        %scale_b_view_274 = ttg.memdesc_trans %scale_b_view_273 {order = array<i32: 0, 3, 2, 1, 4>} : !ttg.memdesc<2x2x32x4x4xi8, #shared4, #smem, mutable> -> !ttg.memdesc<2x4x32x2x4xi8, #shared5, #smem, mutable>
+        %scale_b_view_275 = ttg.memdesc_reshape %scale_b_view_274 : !ttg.memdesc<2x4x32x2x4xi8, #shared5, #smem, mutable> -> !ttg.memdesc<256x8xi8, #shared6, #smem, mutable>
+        %scale_b_view_276 = ttg.memdesc_subslice %scale_b_view_275[0, 0] : !ttg.memdesc<256x8xi8, #shared6, #smem, mutable> -> !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8>
+        %scale_b_277 = ttg.local_load %scale_b_view_276 : !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8> -> tensor<128x4xi8, #linear1>
+        %c11_278 = tt.dot_scaled %a_232 scale %scale_a_238, %b_222 scale %scale_b_228, %c11_212 lhs = e4m3 rhs = e2m1 {fastMath = false} : tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>, tensor<128x4xi8, #linear> * tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>, tensor<128x4xi8, #linear1> -> tensor<128x128xf32, #mma>
+        rocdl.sched.barrier none
+        %c00_279 = tt.dot_scaled %a_246 scale %scale_a_248, %b_242 scale %scale_b_244, %c00_217 lhs = e4m3 rhs = e2m1 {fastMath = false} : tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>, tensor<128x4xi8, #linear> * tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>, tensor<128x4xi8, #linear1> -> tensor<128x128xf32, #mma>
+        rocdl.sched.barrier none
+        %c01_280 = tt.dot_scaled %a_246 scale %scale_a_248, %b_251 scale %scale_b_253, %c01_229 lhs = e4m3 rhs = e2m1 {fastMath = false} : tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>, tensor<128x4xi8, #linear> * tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>, tensor<128x4xi8, #linear1> -> tensor<128x128xf32, #mma>
+        rocdl.sched.barrier none
+        %c10_281 = tt.dot_scaled %a_255 scale %scale_a_257, %b_242 scale %scale_b_244, %c10_239 lhs = e4m3 rhs = e2m1 {fastMath = false} : tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>, tensor<128x4xi8, #linear> * tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>, tensor<128x4xi8, #linear1> -> tensor<128x128xf32, #mma>
+        rocdl.sched.barrier none
+        %c11_282 = tt.dot_scaled %a_255 scale %scale_a_257, %b_251 scale %scale_b_253, %c11_278 lhs = e4m3 rhs = e2m1 {fastMath = false} : tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>, tensor<128x4xi8, #linear> * tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>, tensor<128x4xi8, #linear1> -> tensor<128x128xf32, #mma>
+        rocdl.sched.barrier none
+        scf.yield %c00_279, %c01_280, %c10_281, %c11_282, %a_261, %scale_a_267, %b_271, %scale_b_277, %next_slot_216 : tensor<128x128xf32, #mma>, tensor<128x128xf32, #mma>, tensor<128x128xf32, #mma>, tensor<128x128xf32, #mma>, tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>, tensor<128x4xi8, #linear>, tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>, tensor<128x4xi8, #linear1>, i32
+      }
+      rocdl.sched.barrier none
+      %next_tile = arith.addi %off_n_7, %c64_i32 : i32
+      %has_next = arith.cmpi slt, %next_tile, %c64_i32 : i32
+      %44 = arith.minsi %next_tile, %c63_i32 : i32
+      %group_31 = arith.divsi %44, %c64_i32 : i32
+      %first_m_32 = arith.muli %group_31, %c8_i32 : i32
+      %group_m_33 = arith.subi %c8_i32, %first_m_32 : i32
+      %group_m_34 = arith.minsi %group_m_33, %c8_i32 : i32
+      %local_35 = arith.remsi %44, %c64_i32 : i32
+      %45 = arith.remsi %local_35, %group_m_34 : i32
+      %46 = arith.addi %first_m_32, %45 : i32
+      %47 = arith.muli %46, %c256_i32 : i32
+      %48 = arith.divsi %local_35, %group_m_34 : i32
+      %49 = arith.muli %48, %c256_i32 : i32
+      rocdl.sched.barrier none
+      %slot_36 = arith.addi %arg6, %c5_i32 : i32
+      %slot_37 = arith.remsi %slot_36, %c3_i32 : i32
+      %c00 = tt.dot_scaled %slot_30#4 scale %slot_30#5, %slot_30#6 scale %slot_30#7, %slot_30#0 lhs = e4m3 rhs = e2m1 {fastMath = false} : tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>, tensor<128x4xi8, #linear> * tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>, tensor<128x4xi8, #linear1> -> tensor<128x128xf32, #mma>
+      %50 = arith.cmpi sge, %slot_37, %c0_i32 : i32
+      llvm.intr.assume %50 : i1
+      %51 = arith.cmpi slt, %slot_37, %c3_i32 : i32
+      llvm.intr.assume %51 : i1
+      %slot_38 = arith.remsi %slot_37, %c3_i32 : i32
+      %b_view_39 = ttg.memdesc_index %b_buf[%slot_38] : !ttg.memdesc<3x256x128xi8, #shared2, #smem, mutable> -> !ttg.memdesc<256x128xi8, #shared2, #smem, mutable>
+      %b_view_40 = ttg.memdesc_subslice %b_view_39[128, 0] : !ttg.memdesc<256x128xi8, #shared2, #smem, mutable> -> !ttg.memdesc<128x64xi8, #shared2, #smem, mutable, 256x128>
+      %b_view_41 = ttg.memdesc_trans %b_view_40 {order = array<i32: 1, 0>} : !ttg.memdesc<128x64xi8, #shared2, #smem, mutable, 256x128> -> !ttg.memdesc<64x128xi8, #shared7, #smem, mutable, 128x256>
+      %b_42 = ttg.local_load %b_view_41 : !ttg.memdesc<64x128xi8, #shared7, #smem, mutable, 128x256> -> tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>
+      %scale_b_view_43 = ttg.memdesc_index %bs_buf[%slot_38] : !ttg.memdesc<3x2x1024xi8, #shared, #smem, mutable> -> !ttg.memdesc<2x1024xi8, #shared, #smem, mutable>
+      %scale_b_view_44 = ttg.memdesc_reshape %scale_b_view_43 : !ttg.memdesc<2x1024xi8, #shared, #smem, mutable> -> !ttg.memdesc<2x2x32x4x4xi8, #shared4, #smem, mutable>
+      %scale_b_view_45 = ttg.memdesc_trans %scale_b_view_44 {order = array<i32: 0, 3, 2, 1, 4>} : !ttg.memdesc<2x2x32x4x4xi8, #shared4, #smem, mutable> -> !ttg.memdesc<2x4x32x2x4xi8, #shared5, #smem, mutable>
+      %scale_b_view_46 = ttg.memdesc_reshape %scale_b_view_45 : !ttg.memdesc<2x4x32x2x4xi8, #shared5, #smem, mutable> -> !ttg.memdesc<256x8xi8, #shared6, #smem, mutable>
+      %scale_b_view_47 = ttg.memdesc_subslice %scale_b_view_46[128, 0] : !ttg.memdesc<256x8xi8, #shared6, #smem, mutable> -> !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8>
+      %scale_b_48 = ttg.local_load %scale_b_view_47 : !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8> -> tensor<128x4xi8, #linear1>
+      %c01 = tt.dot_scaled %slot_30#4 scale %slot_30#5, %b_42 scale %scale_b_48, %slot_30#1 lhs = e4m3 rhs = e2m1 {fastMath = false} : tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>, tensor<128x4xi8, #linear> * tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>, tensor<128x4xi8, #linear1> -> tensor<128x128xf32, #mma>
+      llvm.intr.assume %50 : i1
+      llvm.intr.assume %51 : i1
+      %a_view_49 = ttg.memdesc_index %a_buf[%slot_38] : !ttg.memdesc<3x256x256xf8E4M3FN, #shared1, #smem, mutable> -> !ttg.memdesc<256x256xf8E4M3FN, #shared1, #smem, mutable>
+      %a_view_50 = ttg.memdesc_subslice %a_view_49[128, 0] : !ttg.memdesc<256x256xf8E4M3FN, #shared1, #smem, mutable> -> !ttg.memdesc<128x128xf8E4M3FN, #shared1, #smem, mutable, 256x256>
+      %a_51 = ttg.local_load %a_view_50 : !ttg.memdesc<128x128xf8E4M3FN, #shared1, #smem, mutable, 256x256> -> tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>
+      %scale_a_view_52 = ttg.memdesc_index %as_buf[%slot_38] : !ttg.memdesc<3x2x1024xi8, #shared, #smem, mutable> -> !ttg.memdesc<2x1024xi8, #shared, #smem, mutable>
+      %scale_a_view_53 = ttg.memdesc_reshape %scale_a_view_52 : !ttg.memdesc<2x1024xi8, #shared, #smem, mutable> -> !ttg.memdesc<2x2x32x4x4xi8, #shared4, #smem, mutable>
+      %scale_a_view_54 = ttg.memdesc_trans %scale_a_view_53 {order = array<i32: 0, 3, 2, 1, 4>} : !ttg.memdesc<2x2x32x4x4xi8, #shared4, #smem, mutable> -> !ttg.memdesc<2x4x32x2x4xi8, #shared5, #smem, mutable>
+      %scale_a_view_55 = ttg.memdesc_reshape %scale_a_view_54 : !ttg.memdesc<2x4x32x2x4xi8, #shared5, #smem, mutable> -> !ttg.memdesc<256x8xi8, #shared6, #smem, mutable>
+      %scale_a_view_56 = ttg.memdesc_subslice %scale_a_view_55[128, 0] : !ttg.memdesc<256x8xi8, #shared6, #smem, mutable> -> !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8>
+      %scale_a_57 = ttg.local_load %scale_a_view_56 : !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8> -> tensor<128x4xi8, #linear>
+      %c10 = tt.dot_scaled %a_51 scale %scale_a_57, %slot_30#6 scale %slot_30#7, %slot_30#2 lhs = e4m3 rhs = e2m1 {fastMath = false} : tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>, tensor<128x4xi8, #linear> * tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>, tensor<128x4xi8, #linear1> -> tensor<128x128xf32, #mma>
+      llvm.intr.assume %50 : i1
+      llvm.intr.assume %51 : i1
+      %b_view_58 = ttg.memdesc_subslice %b_view_39[0, 64] : !ttg.memdesc<256x128xi8, #shared2, #smem, mutable> -> !ttg.memdesc<128x64xi8, #shared2, #smem, mutable, 256x128>
+      %b_view_59 = ttg.memdesc_trans %b_view_58 {order = array<i32: 1, 0>} : !ttg.memdesc<128x64xi8, #shared2, #smem, mutable, 256x128> -> !ttg.memdesc<64x128xi8, #shared7, #smem, mutable, 128x256>
+      %b_60 = ttg.local_load %b_view_59 : !ttg.memdesc<64x128xi8, #shared7, #smem, mutable, 128x256> -> tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>
+      %scale_b_view_61 = ttg.memdesc_subslice %scale_b_view_46[0, 4] : !ttg.memdesc<256x8xi8, #shared6, #smem, mutable> -> !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8>
+      %scale_b_62 = ttg.local_load %scale_b_view_61 : !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8> -> tensor<128x4xi8, #linear1>
+      llvm.intr.assume %50 : i1
+      llvm.intr.assume %51 : i1
+      %a_view_63 = ttg.memdesc_subslice %a_view_49[0, 128] : !ttg.memdesc<256x256xf8E4M3FN, #shared1, #smem, mutable> -> !ttg.memdesc<128x128xf8E4M3FN, #shared1, #smem, mutable, 256x256>
+      %a_64 = ttg.local_load %a_view_63 : !ttg.memdesc<128x128xf8E4M3FN, #shared1, #smem, mutable, 256x256> -> tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>
+      %scale_a_view_65 = ttg.memdesc_subslice %scale_a_view_55[0, 4] : !ttg.memdesc<256x8xi8, #shared6, #smem, mutable> -> !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8>
+      %scale_a_66 = ttg.local_load %scale_a_view_65 : !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8> -> tensor<128x4xi8, #linear>
+      rocdl.sched.barrier none
+      llvm.intr.assume %50 : i1
+      llvm.intr.assume %51 : i1
+      %b_view_67 = ttg.memdesc_subslice %b_view_39[128, 64] : !ttg.memdesc<256x128xi8, #shared2, #smem, mutable> -> !ttg.memdesc<128x64xi8, #shared2, #smem, mutable, 256x128>
+      %b_view_68 = ttg.memdesc_trans %b_view_67 {order = array<i32: 1, 0>} : !ttg.memdesc<128x64xi8, #shared2, #smem, mutable, 256x128> -> !ttg.memdesc<64x128xi8, #shared7, #smem, mutable, 128x256>
+      %b_69 = ttg.local_load %b_view_68 : !ttg.memdesc<64x128xi8, #shared7, #smem, mutable, 128x256> -> tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>
+      %scale_b_view_70 = ttg.memdesc_subslice %scale_b_view_46[128, 4] : !ttg.memdesc<256x8xi8, #shared6, #smem, mutable> -> !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8>
+      %scale_b_71 = ttg.local_load %scale_b_view_70 : !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8> -> tensor<128x4xi8, #linear1>
+      llvm.intr.assume %50 : i1
+      llvm.intr.assume %51 : i1
+      %a_view_72 = ttg.memdesc_subslice %a_view_49[128, 128] : !ttg.memdesc<256x256xf8E4M3FN, #shared1, #smem, mutable> -> !ttg.memdesc<128x128xf8E4M3FN, #shared1, #smem, mutable, 256x256>
+      %a_73 = ttg.local_load %a_view_72 : !ttg.memdesc<128x128xf8E4M3FN, #shared1, #smem, mutable, 256x256> -> tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>
+      %scale_a_view_74 = ttg.memdesc_subslice %scale_a_view_55[128, 4] : !ttg.memdesc<256x8xi8, #shared6, #smem, mutable> -> !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8>
+      %scale_a_75 = ttg.local_load %scale_a_view_74 : !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8> -> tensor<128x4xi8, #linear>
+      rocdl.sched.barrier none
+      %52 = amdg.async_tdm_wait  {num = 2 : i32}
+      %next_slot = arith.addi %arg6, %c6_i32 : i32
+      %next_slot_76 = arith.remsi %next_slot, %c3_i32 : i32
+      %53 = arith.cmpi sge, %next_slot_76, %c0_i32 : i32
+      llvm.intr.assume %53 : i1
+      %54 = arith.cmpi slt, %next_slot_76, %c3_i32 : i32
+      llvm.intr.assume %54 : i1
+      %slot_77 = arith.remsi %next_slot_76, %c3_i32 : i32
+      %a_view_78 = ttg.memdesc_index %a_buf[%slot_77] : !ttg.memdesc<3x256x256xf8E4M3FN, #shared1, #smem, mutable> -> !ttg.memdesc<256x256xf8E4M3FN, #shared1, #smem, mutable>
+      %a_view_79 = ttg.memdesc_subslice %a_view_78[0, 0] : !ttg.memdesc<256x256xf8E4M3FN, #shared1, #smem, mutable> -> !ttg.memdesc<128x128xf8E4M3FN, #shared1, #smem, mutable, 256x256>
+      %a_80 = ttg.local_load %a_view_79 : !ttg.memdesc<128x128xf8E4M3FN, #shared1, #smem, mutable, 256x256> -> tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>
+      %scale_a_view_81 = ttg.memdesc_index %as_buf[%slot_77] : !ttg.memdesc<3x2x1024xi8, #shared, #smem, mutable> -> !ttg.memdesc<2x1024xi8, #shared, #smem, mutable>
+      %scale_a_view_82 = ttg.memdesc_reshape %scale_a_view_81 : !ttg.memdesc<2x1024xi8, #shared, #smem, mutable> -> !ttg.memdesc<2x2x32x4x4xi8, #shared4, #smem, mutable>
+      %scale_a_view_83 = ttg.memdesc_trans %scale_a_view_82 {order = array<i32: 0, 3, 2, 1, 4>} : !ttg.memdesc<2x2x32x4x4xi8, #shared4, #smem, mutable> -> !ttg.memdesc<2x4x32x2x4xi8, #shared5, #smem, mutable>
+      %scale_a_view_84 = ttg.memdesc_reshape %scale_a_view_83 : !ttg.memdesc<2x4x32x2x4xi8, #shared5, #smem, mutable> -> !ttg.memdesc<256x8xi8, #shared6, #smem, mutable>
+      %scale_a_view_85 = ttg.memdesc_subslice %scale_a_view_84[0, 0] : !ttg.memdesc<256x8xi8, #shared6, #smem, mutable> -> !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8>
+      %scale_a_86 = ttg.local_load %scale_a_view_85 : !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8> -> tensor<128x4xi8, #linear>
+      llvm.intr.assume %53 : i1
+      llvm.intr.assume %54 : i1
+      %b_view_87 = ttg.memdesc_index %b_buf[%slot_77] : !ttg.memdesc<3x256x128xi8, #shared2, #smem, mutable> -> !ttg.memdesc<256x128xi8, #shared2, #smem, mutable>
+      %b_view_88 = ttg.memdesc_subslice %b_view_87[0, 0] : !ttg.memdesc<256x128xi8, #shared2, #smem, mutable> -> !ttg.memdesc<128x64xi8, #shared2, #smem, mutable, 256x128>
+      %b_view_89 = ttg.memdesc_trans %b_view_88 {order = array<i32: 1, 0>} : !ttg.memdesc<128x64xi8, #shared2, #smem, mutable, 256x128> -> !ttg.memdesc<64x128xi8, #shared7, #smem, mutable, 128x256>
+      %b_90 = ttg.local_load %b_view_89 : !ttg.memdesc<64x128xi8, #shared7, #smem, mutable, 128x256> -> tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>
+      %scale_b_view_91 = ttg.memdesc_index %bs_buf[%slot_77] : !ttg.memdesc<3x2x1024xi8, #shared, #smem, mutable> -> !ttg.memdesc<2x1024xi8, #shared, #smem, mutable>
+      %scale_b_view_92 = ttg.memdesc_reshape %scale_b_view_91 : !ttg.memdesc<2x1024xi8, #shared, #smem, mutable> -> !ttg.memdesc<2x2x32x4x4xi8, #shared4, #smem, mutable>
+      %scale_b_view_93 = ttg.memdesc_trans %scale_b_view_92 {order = array<i32: 0, 3, 2, 1, 4>} : !ttg.memdesc<2x2x32x4x4xi8, #shared4, #smem, mutable> -> !ttg.memdesc<2x4x32x2x4xi8, #shared5, #smem, mutable>
+      %scale_b_view_94 = ttg.memdesc_reshape %scale_b_view_93 : !ttg.memdesc<2x4x32x2x4xi8, #shared5, #smem, mutable> -> !ttg.memdesc<256x8xi8, #shared6, #smem, mutable>
+      %scale_b_view_95 = ttg.memdesc_subslice %scale_b_view_94[0, 0] : !ttg.memdesc<256x8xi8, #shared6, #smem, mutable> -> !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8>
+      %scale_b_96 = ttg.local_load %scale_b_view_95 : !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8> -> tensor<128x4xi8, #linear1>
+      %c11 = tt.dot_scaled %a_51 scale %scale_a_57, %b_42 scale %scale_b_48, %slot_30#3 lhs = e4m3 rhs = e2m1 {fastMath = false} : tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>, tensor<128x4xi8, #linear> * tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>, tensor<128x4xi8, #linear1> -> tensor<128x128xf32, #mma>
+      rocdl.sched.barrier none
+      %c00_97 = tt.dot_scaled %a_64 scale %scale_a_66, %b_60 scale %scale_b_62, %c00 lhs = e4m3 rhs = e2m1 {fastMath = false} : tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>, tensor<128x4xi8, #linear> * tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>, tensor<128x4xi8, #linear1> -> tensor<128x128xf32, #mma>
+      rocdl.sched.barrier none
+      %c01_98 = tt.dot_scaled %a_64 scale %scale_a_66, %b_69 scale %scale_b_71, %c01 lhs = e4m3 rhs = e2m1 {fastMath = false} : tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>, tensor<128x4xi8, #linear> * tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>, tensor<128x4xi8, #linear1> -> tensor<128x128xf32, #mma>
+      rocdl.sched.barrier none
+      %c10_99 = tt.dot_scaled %a_73 scale %scale_a_75, %b_60 scale %scale_b_62, %c10 lhs = e4m3 rhs = e2m1 {fastMath = false} : tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>, tensor<128x4xi8, #linear> * tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>, tensor<128x4xi8, #linear1> -> tensor<128x128xf32, #mma>
+      rocdl.sched.barrier none
+      %c11_100 = tt.dot_scaled %a_73 scale %scale_a_75, %b_69 scale %scale_b_71, %c11 lhs = e4m3 rhs = e2m1 {fastMath = false} : tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>, tensor<128x4xi8, #linear> * tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>, tensor<128x4xi8, #linear1> -> tensor<128x128xf32, #mma>
+      rocdl.sched.barrier none
+      %c00_101 = tt.dot_scaled %a_80 scale %scale_a_86, %b_90 scale %scale_b_96, %c00_97 lhs = e4m3 rhs = e2m1 {fastMath = false} : tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>, tensor<128x4xi8, #linear> * tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>, tensor<128x4xi8, #linear1> -> tensor<128x128xf32, #mma>
+      llvm.intr.assume %53 : i1
+      llvm.intr.assume %54 : i1
+      %b_view_102 = ttg.memdesc_subslice %b_view_87[128, 0] : !ttg.memdesc<256x128xi8, #shared2, #smem, mutable> -> !ttg.memdesc<128x64xi8, #shared2, #smem, mutable, 256x128>
+      %b_view_103 = ttg.memdesc_trans %b_view_102 {order = array<i32: 1, 0>} : !ttg.memdesc<128x64xi8, #shared2, #smem, mutable, 256x128> -> !ttg.memdesc<64x128xi8, #shared7, #smem, mutable, 128x256>
+      %b_104 = ttg.local_load %b_view_103 : !ttg.memdesc<64x128xi8, #shared7, #smem, mutable, 128x256> -> tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>
+      %scale_b_view_105 = ttg.memdesc_subslice %scale_b_view_94[128, 0] : !ttg.memdesc<256x8xi8, #shared6, #smem, mutable> -> !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8>
+      %scale_b_106 = ttg.local_load %scale_b_view_105 : !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8> -> tensor<128x4xi8, #linear1>
+      %c01_107 = tt.dot_scaled %a_80 scale %scale_a_86, %b_104 scale %scale_b_106, %c01_98 lhs = e4m3 rhs = e2m1 {fastMath = false} : tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>, tensor<128x4xi8, #linear> * tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>, tensor<128x4xi8, #linear1> -> tensor<128x128xf32, #mma>
+      llvm.intr.assume %53 : i1
+      llvm.intr.assume %54 : i1
+      %a_view_108 = ttg.memdesc_subslice %a_view_78[128, 0] : !ttg.memdesc<256x256xf8E4M3FN, #shared1, #smem, mutable> -> !ttg.memdesc<128x128xf8E4M3FN, #shared1, #smem, mutable, 256x256>
+      %a_109 = ttg.local_load %a_view_108 : !ttg.memdesc<128x128xf8E4M3FN, #shared1, #smem, mutable, 256x256> -> tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>
+      %scale_a_view_110 = ttg.memdesc_subslice %scale_a_view_84[128, 0] : !ttg.memdesc<256x8xi8, #shared6, #smem, mutable> -> !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8>
+      %scale_a_111 = ttg.local_load %scale_a_view_110 : !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8> -> tensor<128x4xi8, #linear>
+      %c10_112 = tt.dot_scaled %a_109 scale %scale_a_111, %b_90 scale %scale_b_96, %c10_99 lhs = e4m3 rhs = e2m1 {fastMath = false} : tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>, tensor<128x4xi8, #linear> * tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>, tensor<128x4xi8, #linear1> -> tensor<128x128xf32, #mma>
+      llvm.intr.assume %53 : i1
+      llvm.intr.assume %54 : i1
+      %b_view_113 = ttg.memdesc_subslice %b_view_87[0, 64] : !ttg.memdesc<256x128xi8, #shared2, #smem, mutable> -> !ttg.memdesc<128x64xi8, #shared2, #smem, mutable, 256x128>
+      %b_view_114 = ttg.memdesc_trans %b_view_113 {order = array<i32: 1, 0>} : !ttg.memdesc<128x64xi8, #shared2, #smem, mutable, 256x128> -> !ttg.memdesc<64x128xi8, #shared7, #smem, mutable, 128x256>
+      %b_115 = ttg.local_load %b_view_114 : !ttg.memdesc<64x128xi8, #shared7, #smem, mutable, 128x256> -> tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>
+      %scale_b_view_116 = ttg.memdesc_subslice %scale_b_view_94[0, 4] : !ttg.memdesc<256x8xi8, #shared6, #smem, mutable> -> !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8>
+      %scale_b_117 = ttg.local_load %scale_b_view_116 : !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8> -> tensor<128x4xi8, #linear1>
+      llvm.intr.assume %53 : i1
+      llvm.intr.assume %54 : i1
+      %a_view_118 = ttg.memdesc_subslice %a_view_78[0, 128] : !ttg.memdesc<256x256xf8E4M3FN, #shared1, #smem, mutable> -> !ttg.memdesc<128x128xf8E4M3FN, #shared1, #smem, mutable, 256x256>
+      %a_119 = ttg.local_load %a_view_118 : !ttg.memdesc<128x128xf8E4M3FN, #shared1, #smem, mutable, 256x256> -> tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>
+      %scale_a_view_120 = ttg.memdesc_subslice %scale_a_view_84[0, 4] : !ttg.memdesc<256x8xi8, #shared6, #smem, mutable> -> !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8>
+      %scale_a_121 = ttg.local_load %scale_a_view_120 : !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8> -> tensor<128x4xi8, #linear>
+      rocdl.sched.barrier none
+      llvm.intr.assume %53 : i1
+      llvm.intr.assume %54 : i1
+      %b_view_122 = ttg.memdesc_subslice %b_view_87[128, 64] : !ttg.memdesc<256x128xi8, #shared2, #smem, mutable> -> !ttg.memdesc<128x64xi8, #shared2, #smem, mutable, 256x128>
+      %b_view_123 = ttg.memdesc_trans %b_view_122 {order = array<i32: 1, 0>} : !ttg.memdesc<128x64xi8, #shared2, #smem, mutable, 256x128> -> !ttg.memdesc<64x128xi8, #shared7, #smem, mutable, 128x256>
+      %b_124 = ttg.local_load %b_view_123 : !ttg.memdesc<64x128xi8, #shared7, #smem, mutable, 128x256> -> tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>
+      %scale_b_view_125 = ttg.memdesc_subslice %scale_b_view_94[128, 4] : !ttg.memdesc<256x8xi8, #shared6, #smem, mutable> -> !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8>
+      %scale_b_126 = ttg.local_load %scale_b_view_125 : !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8> -> tensor<128x4xi8, #linear1>
+      llvm.intr.assume %53 : i1
+      llvm.intr.assume %54 : i1
+      %a_view_127 = ttg.memdesc_subslice %a_view_78[128, 128] : !ttg.memdesc<256x256xf8E4M3FN, #shared1, #smem, mutable> -> !ttg.memdesc<128x128xf8E4M3FN, #shared1, #smem, mutable, 256x256>
+      %a_128 = ttg.local_load %a_view_127 : !ttg.memdesc<128x128xf8E4M3FN, #shared1, #smem, mutable, 256x256> -> tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>
+      %scale_a_view_129 = ttg.memdesc_subslice %scale_a_view_84[128, 4] : !ttg.memdesc<256x8xi8, #shared6, #smem, mutable> -> !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8>
+      %scale_a_130 = ttg.local_load %scale_a_view_129 : !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8> -> tensor<128x4xi8, #linear>
+      rocdl.sched.barrier none
+      %55 = amdg.async_tdm_wait  {num = 0 : i32}
+      %next_slot_131 = arith.addi %arg6, %c7_i32 : i32
+      %next_slot_132 = arith.remsi %next_slot_131, %c3_i32 : i32
+      %56 = arith.cmpi sge, %next_slot_132, %c0_i32 : i32
+      llvm.intr.assume %56 : i1
+      %57 = arith.cmpi slt, %next_slot_132, %c3_i32 : i32
+      llvm.intr.assume %57 : i1
+      %slot_133 = arith.remsi %next_slot_132, %c3_i32 : i32
+      %a_view_134 = ttg.memdesc_index %a_buf[%slot_133] : !ttg.memdesc<3x256x256xf8E4M3FN, #shared1, #smem, mutable> -> !ttg.memdesc<256x256xf8E4M3FN, #shared1, #smem, mutable>
+      %a_view_135 = ttg.memdesc_subslice %a_view_134[0, 0] : !ttg.memdesc<256x256xf8E4M3FN, #shared1, #smem, mutable> -> !ttg.memdesc<128x128xf8E4M3FN, #shared1, #smem, mutable, 256x256>
+      %a_136 = ttg.local_load %a_view_135 : !ttg.memdesc<128x128xf8E4M3FN, #shared1, #smem, mutable, 256x256> -> tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>
+      %scale_a_view_137 = ttg.memdesc_index %as_buf[%slot_133] : !ttg.memdesc<3x2x1024xi8, #shared, #smem, mutable> -> !ttg.memdesc<2x1024xi8, #shared, #smem, mutable>
+      %scale_a_view_138 = ttg.memdesc_reshape %scale_a_view_137 : !ttg.memdesc<2x1024xi8, #shared, #smem, mutable> -> !ttg.memdesc<2x2x32x4x4xi8, #shared4, #smem, mutable>
+      %scale_a_view_139 = ttg.memdesc_trans %scale_a_view_138 {order = array<i32: 0, 3, 2, 1, 4>} : !ttg.memdesc<2x2x32x4x4xi8, #shared4, #smem, mutable> -> !ttg.memdesc<2x4x32x2x4xi8, #shared5, #smem, mutable>
+      %scale_a_view_140 = ttg.memdesc_reshape %scale_a_view_139 : !ttg.memdesc<2x4x32x2x4xi8, #shared5, #smem, mutable> -> !ttg.memdesc<256x8xi8, #shared6, #smem, mutable>
+      %scale_a_view_141 = ttg.memdesc_subslice %scale_a_view_140[0, 0] : !ttg.memdesc<256x8xi8, #shared6, #smem, mutable> -> !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8>
+      %scale_a_142 = ttg.local_load %scale_a_view_141 : !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8> -> tensor<128x4xi8, #linear>
+      llvm.intr.assume %56 : i1
+      llvm.intr.assume %57 : i1
+      %b_view_143 = ttg.memdesc_index %b_buf[%slot_133] : !ttg.memdesc<3x256x128xi8, #shared2, #smem, mutable> -> !ttg.memdesc<256x128xi8, #shared2, #smem, mutable>
+      %b_view_144 = ttg.memdesc_subslice %b_view_143[0, 0] : !ttg.memdesc<256x128xi8, #shared2, #smem, mutable> -> !ttg.memdesc<128x64xi8, #shared2, #smem, mutable, 256x128>
+      %b_view_145 = ttg.memdesc_trans %b_view_144 {order = array<i32: 1, 0>} : !ttg.memdesc<128x64xi8, #shared2, #smem, mutable, 256x128> -> !ttg.memdesc<64x128xi8, #shared7, #smem, mutable, 128x256>
+      %b_146 = ttg.local_load %b_view_145 : !ttg.memdesc<64x128xi8, #shared7, #smem, mutable, 128x256> -> tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>
+      %scale_b_view_147 = ttg.memdesc_index %bs_buf[%slot_133] : !ttg.memdesc<3x2x1024xi8, #shared, #smem, mutable> -> !ttg.memdesc<2x1024xi8, #shared, #smem, mutable>
+      %scale_b_view_148 = ttg.memdesc_reshape %scale_b_view_147 : !ttg.memdesc<2x1024xi8, #shared, #smem, mutable> -> !ttg.memdesc<2x2x32x4x4xi8, #shared4, #smem, mutable>
+      %scale_b_view_149 = ttg.memdesc_trans %scale_b_view_148 {order = array<i32: 0, 3, 2, 1, 4>} : !ttg.memdesc<2x2x32x4x4xi8, #shared4, #smem, mutable> -> !ttg.memdesc<2x4x32x2x4xi8, #shared5, #smem, mutable>
+      %scale_b_view_150 = ttg.memdesc_reshape %scale_b_view_149 : !ttg.memdesc<2x4x32x2x4xi8, #shared5, #smem, mutable> -> !ttg.memdesc<256x8xi8, #shared6, #smem, mutable>
+      %scale_b_view_151 = ttg.memdesc_subslice %scale_b_view_150[0, 0] : !ttg.memdesc<256x8xi8, #shared6, #smem, mutable> -> !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8>
+      %scale_b_152 = ttg.local_load %scale_b_view_151 : !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8> -> tensor<128x4xi8, #linear1>
+      %c11_153 = tt.dot_scaled %a_109 scale %scale_a_111, %b_104 scale %scale_b_106, %c11_100 lhs = e4m3 rhs = e2m1 {fastMath = false} : tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>, tensor<128x4xi8, #linear> * tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>, tensor<128x4xi8, #linear1> -> tensor<128x128xf32, #mma>
+      rocdl.sched.barrier none
+      %c00_154 = tt.dot_scaled %a_119 scale %scale_a_121, %b_115 scale %scale_b_117, %c00_101 lhs = e4m3 rhs = e2m1 {fastMath = false} : tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>, tensor<128x4xi8, #linear> * tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>, tensor<128x4xi8, #linear1> -> tensor<128x128xf32, #mma>
+      rocdl.sched.barrier none
+      %c01_155 = tt.dot_scaled %a_119 scale %scale_a_121, %b_124 scale %scale_b_126, %c01_107 lhs = e4m3 rhs = e2m1 {fastMath = false} : tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>, tensor<128x4xi8, #linear> * tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>, tensor<128x4xi8, #linear1> -> tensor<128x128xf32, #mma>
+      rocdl.sched.barrier none
+      %c10_156 = tt.dot_scaled %a_128 scale %scale_a_130, %b_115 scale %scale_b_117, %c10_112 lhs = e4m3 rhs = e2m1 {fastMath = false} : tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>, tensor<128x4xi8, #linear> * tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>, tensor<128x4xi8, #linear1> -> tensor<128x128xf32, #mma>
+      rocdl.sched.barrier none
+      %c11_157 = tt.dot_scaled %a_128 scale %scale_a_130, %b_124 scale %scale_b_126, %c11_153 lhs = e4m3 rhs = e2m1 {fastMath = false} : tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>, tensor<128x4xi8, #linear> * tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>, tensor<128x4xi8, #linear1> -> tensor<128x128xf32, #mma>
+      rocdl.sched.barrier none
+      %c00_158 = tt.dot_scaled %a_136 scale %scale_a_142, %b_146 scale %scale_b_152, %c00_154 lhs = e4m3 rhs = e2m1 {fastMath = false} : tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>, tensor<128x4xi8, #linear> * tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>, tensor<128x4xi8, #linear1> -> tensor<128x128xf32, #mma>
+      llvm.intr.assume %56 : i1
+      llvm.intr.assume %57 : i1
+      %b_view_159 = ttg.memdesc_subslice %b_view_143[128, 0] : !ttg.memdesc<256x128xi8, #shared2, #smem, mutable> -> !ttg.memdesc<128x64xi8, #shared2, #smem, mutable, 256x128>
+      %b_view_160 = ttg.memdesc_trans %b_view_159 {order = array<i32: 1, 0>} : !ttg.memdesc<128x64xi8, #shared2, #smem, mutable, 256x128> -> !ttg.memdesc<64x128xi8, #shared7, #smem, mutable, 128x256>
+      %b_161 = ttg.local_load %b_view_160 : !ttg.memdesc<64x128xi8, #shared7, #smem, mutable, 128x256> -> tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>
+      %scale_b_view_162 = ttg.memdesc_subslice %scale_b_view_150[128, 0] : !ttg.memdesc<256x8xi8, #shared6, #smem, mutable> -> !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8>
+      %scale_b_163 = ttg.local_load %scale_b_view_162 : !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8> -> tensor<128x4xi8, #linear1>
+      %c01_164 = tt.dot_scaled %a_136 scale %scale_a_142, %b_161 scale %scale_b_163, %c01_155 lhs = e4m3 rhs = e2m1 {fastMath = false} : tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>, tensor<128x4xi8, #linear> * tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>, tensor<128x4xi8, #linear1> -> tensor<128x128xf32, #mma>
+      llvm.intr.assume %56 : i1
+      llvm.intr.assume %57 : i1
+      %a_view_165 = ttg.memdesc_subslice %a_view_134[128, 0] : !ttg.memdesc<256x256xf8E4M3FN, #shared1, #smem, mutable> -> !ttg.memdesc<128x128xf8E4M3FN, #shared1, #smem, mutable, 256x256>
+      %a_166 = ttg.local_load %a_view_165 : !ttg.memdesc<128x128xf8E4M3FN, #shared1, #smem, mutable, 256x256> -> tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>
+      %scale_a_view_167 = ttg.memdesc_subslice %scale_a_view_140[128, 0] : !ttg.memdesc<256x8xi8, #shared6, #smem, mutable> -> !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8>
+      %scale_a_168 = ttg.local_load %scale_a_view_167 : !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8> -> tensor<128x4xi8, #linear>
+      %c10_169 = tt.dot_scaled %a_166 scale %scale_a_168, %b_146 scale %scale_b_152, %c10_156 lhs = e4m3 rhs = e2m1 {fastMath = false} : tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>, tensor<128x4xi8, #linear> * tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>, tensor<128x4xi8, #linear1> -> tensor<128x128xf32, #mma>
+      llvm.intr.assume %56 : i1
+      llvm.intr.assume %57 : i1
+      %b_view_170 = ttg.memdesc_subslice %b_view_143[0, 64] : !ttg.memdesc<256x128xi8, #shared2, #smem, mutable> -> !ttg.memdesc<128x64xi8, #shared2, #smem, mutable, 256x128>
+      %b_view_171 = ttg.memdesc_trans %b_view_170 {order = array<i32: 1, 0>} : !ttg.memdesc<128x64xi8, #shared2, #smem, mutable, 256x128> -> !ttg.memdesc<64x128xi8, #shared7, #smem, mutable, 128x256>
+      %b_172 = ttg.local_load %b_view_171 : !ttg.memdesc<64x128xi8, #shared7, #smem, mutable, 128x256> -> tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>
+      %scale_b_view_173 = ttg.memdesc_subslice %scale_b_view_150[0, 4] : !ttg.memdesc<256x8xi8, #shared6, #smem, mutable> -> !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8>
+      %scale_b_174 = ttg.local_load %scale_b_view_173 : !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8> -> tensor<128x4xi8, #linear1>
+      llvm.intr.assume %56 : i1
+      llvm.intr.assume %57 : i1
+      %a_view_175 = ttg.memdesc_subslice %a_view_134[0, 128] : !ttg.memdesc<256x256xf8E4M3FN, #shared1, #smem, mutable> -> !ttg.memdesc<128x128xf8E4M3FN, #shared1, #smem, mutable, 256x256>
+      %a_176 = ttg.local_load %a_view_175 : !ttg.memdesc<128x128xf8E4M3FN, #shared1, #smem, mutable, 256x256> -> tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>
+      %scale_a_view_177 = ttg.memdesc_subslice %scale_a_view_140[0, 4] : !ttg.memdesc<256x8xi8, #shared6, #smem, mutable> -> !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8>
+      %scale_a_178 = ttg.local_load %scale_a_view_177 : !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8> -> tensor<128x4xi8, #linear>
+      rocdl.sched.barrier none
+      llvm.intr.assume %56 : i1
+      llvm.intr.assume %57 : i1
+      %b_view_179 = ttg.memdesc_subslice %b_view_143[128, 64] : !ttg.memdesc<256x128xi8, #shared2, #smem, mutable> -> !ttg.memdesc<128x64xi8, #shared2, #smem, mutable, 256x128>
+      %b_view_180 = ttg.memdesc_trans %b_view_179 {order = array<i32: 1, 0>} : !ttg.memdesc<128x64xi8, #shared2, #smem, mutable, 256x128> -> !ttg.memdesc<64x128xi8, #shared7, #smem, mutable, 128x256>
+      %b_181 = ttg.local_load %b_view_180 : !ttg.memdesc<64x128xi8, #shared7, #smem, mutable, 128x256> -> tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>
+      %scale_b_view_182 = ttg.memdesc_subslice %scale_b_view_150[128, 4] : !ttg.memdesc<256x8xi8, #shared6, #smem, mutable> -> !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8>
+      %scale_b_183 = ttg.local_load %scale_b_view_182 : !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8> -> tensor<128x4xi8, #linear1>
+      llvm.intr.assume %56 : i1
+      llvm.intr.assume %57 : i1
+      %a_view_184 = ttg.memdesc_subslice %a_view_134[128, 128] : !ttg.memdesc<256x256xf8E4M3FN, #shared1, #smem, mutable> -> !ttg.memdesc<128x128xf8E4M3FN, #shared1, #smem, mutable, 256x256>
+      %a_185 = ttg.local_load %a_view_184 : !ttg.memdesc<128x128xf8E4M3FN, #shared1, #smem, mutable, 256x256> -> tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>
+      %scale_a_view_186 = ttg.memdesc_subslice %scale_a_view_140[128, 4] : !ttg.memdesc<256x8xi8, #shared6, #smem, mutable> -> !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8>
+      %scale_a_187 = ttg.local_load %scale_a_view_186 : !ttg.memdesc<128x4xi8, #shared6, #smem, mutable, 256x8> -> tensor<128x4xi8, #linear>
+      rocdl.sched.barrier none
+      %c11_188 = tt.dot_scaled %a_166 scale %scale_a_168, %b_161 scale %scale_b_163, %c11_157 lhs = e4m3 rhs = e2m1 {fastMath = false} : tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>, tensor<128x4xi8, #linear> * tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>, tensor<128x4xi8, #linear1> -> tensor<128x128xf32, #mma>
+      rocdl.sched.barrier none
+      %c00_189 = tt.dot_scaled %a_176 scale %scale_a_178, %b_172 scale %scale_b_174, %c00_158 lhs = e4m3 rhs = e2m1 {fastMath = false} : tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>, tensor<128x4xi8, #linear> * tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>, tensor<128x4xi8, #linear1> -> tensor<128x128xf32, #mma>
+      rocdl.sched.barrier none
+      %c01_190 = tt.dot_scaled %a_176 scale %scale_a_178, %b_181 scale %scale_b_183, %c01_164 lhs = e4m3 rhs = e2m1 {fastMath = false} : tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>, tensor<128x4xi8, #linear> * tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>, tensor<128x4xi8, #linear1> -> tensor<128x128xf32, #mma>
+      rocdl.sched.barrier none
+      %c10_191 = tt.dot_scaled %a_185 scale %scale_a_187, %b_172 scale %scale_b_174, %c10_169 lhs = e4m3 rhs = e2m1 {fastMath = false} : tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>, tensor<128x4xi8, #linear> * tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>, tensor<128x4xi8, #linear1> -> tensor<128x128xf32, #mma>
+      rocdl.sched.barrier none
+      %c11_192 = tt.dot_scaled %a_185 scale %scale_a_187, %b_181 scale %scale_b_183, %c11_188 lhs = e4m3 rhs = e2m1 {fastMath = false} : tensor<128x128xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 16}>>, tensor<128x4xi8, #linear> * tensor<64x128xi8, #ttg.dot_op<{opIdx = 1, parent = #mma1, kWidth = 16}>>, tensor<128x4xi8, #linear1> -> tensor<128x128xf32, #mma>
+      rocdl.sched.barrier none
+      rocdl.sched.barrier none
+      %base = arith.extsi %38 : i32 to i64
+      %base_193 = arith.muli %base, %c2048_i64 : i64
+      %base_194 = arith.trunci %base_193 : i64 to i32
+      %base_195 = arith.addi %base_194, %40 : i32
+      %desc = tt.addptr %c_ptr, %base_195 : !tt.ptr<f32>, i32
+      %desc_196 = tt.make_tensor_descriptor %desc, [%c128_i32, %c128_i32], [%c2048_i64, %c1_i64] : !tt.ptr<f32>, !tt.tensordesc<128x128xf32, #shared3>
+      %58 = amdg.async_tdm_wait  {num = 2 : i32}
+      ttg.local_store %c00_189, %view : tensor<128x128xf32, #mma> -> !ttg.memdesc<128x128xf32, #shared3, #smem, mutable>
+      %59 = amdg.update_tensor_descriptor %desc_196 add_offsets = [%c0_i32, %c0_i32] : !tt.tensordesc<128x128xf32, #shared3>
+      %60 = amdg.async_tdm_copy_local_to_global %59 from %view : !ttg.memdesc<128x128xf32, #shared3, #smem, mutable> -> !tt.tensordesc<128x128xf32, #shared3>
+      %61 = arith.addi %40, %c128_i32 : i32
+      %base_197 = arith.addi %base_194, %61 : i32
+      %desc_198 = tt.addptr %c_ptr, %base_197 : !tt.ptr<f32>, i32
+      %desc_199 = tt.make_tensor_descriptor %desc_198, [%c128_i32, %c128_i32], [%c2048_i64, %c1_i64] : !tt.ptr<f32>, !tt.tensordesc<128x128xf32, #shared3>
+      %62 = amdg.async_tdm_wait  {num = 2 : i32}
+      ttg.local_store %c01_190, %view_5 : tensor<128x128xf32, #mma> -> !ttg.memdesc<128x128xf32, #shared3, #smem, mutable>
+      %63 = amdg.update_tensor_descriptor %desc_199 add_offsets = [%c0_i32, %c0_i32] : !tt.tensordesc<128x128xf32, #shared3>
+      %64 = amdg.async_tdm_copy_local_to_global %63 from %view_5 : !ttg.memdesc<128x128xf32, #shared3, #smem, mutable> -> !tt.tensordesc<128x128xf32, #shared3>
+      %65 = arith.addi %38, %c128_i32 : i32
+      %base_200 = arith.extsi %65 : i32 to i64
+      %base_201 = arith.muli %base_200, %c2048_i64 : i64
+      %base_202 = arith.trunci %base_201 : i64 to i32
+      %base_203 = arith.addi %base_202, %40 : i32
+      %desc_204 = tt.addptr %c_ptr, %base_203 : !tt.ptr<f32>, i32
+      %desc_205 = tt.make_tensor_descriptor %desc_204, [%c128_i32, %c128_i32], [%c2048_i64, %c1_i64] : !tt.ptr<f32>, !tt.tensordesc<128x128xf32, #shared3>
+      %66 = amdg.async_tdm_wait  {num = 2 : i32}
+      ttg.local_store %c10_191, %view_6 : tensor<128x128xf32, #mma> -> !ttg.memdesc<128x128xf32, #shared3, #smem, mutable>
+      %67 = amdg.update_tensor_descriptor %desc_205 add_offsets = [%c0_i32, %c0_i32] : !tt.tensordesc<128x128xf32, #shared3>
+      %68 = amdg.async_tdm_copy_local_to_global %67 from %view_6 : !ttg.memdesc<128x128xf32, #shared3, #smem, mutable> -> !tt.tensordesc<128x128xf32, #shared3>
+      %base_206 = arith.addi %base_202, %61 : i32
+      %desc_207 = tt.addptr %c_ptr, %base_206 : !tt.ptr<f32>, i32
+      %desc_208 = tt.make_tensor_descriptor %desc_207, [%c128_i32, %c128_i32], [%c2048_i64, %c1_i64] : !tt.ptr<f32>, !tt.tensordesc<128x128xf32, #shared3>
+      %69 = amdg.async_tdm_wait  {num = 2 : i32}
+      ttg.local_store %c11_192, %view : tensor<128x128xf32, #mma> -> !ttg.memdesc<128x128xf32, #shared3, #smem, mutable>
+      %70 = amdg.update_tensor_descriptor %desc_208 add_offsets = [%c0_i32, %c0_i32] : !tt.tensordesc<128x128xf32, #shared3>
+      %71 = amdg.async_tdm_copy_local_to_global %70 from %view : !ttg.memdesc<128x128xf32, #shared3, #smem, mutable> -> !tt.tensordesc<128x128xf32, #shared3>
+      rocdl.sched.barrier none
+      scf.if %has_next {
+        %72 = amdg.async_tdm_wait  {num = 2 : i32}
+        %ad_209 = amdg.update_tensor_descriptor %a_desc add_offsets = [%47, %c0_i32] : !tt.tensordesc<256x256xf8E4M3FN, #shared1>
+        %bd_210 = amdg.update_tensor_descriptor %b_desc_0 add_offsets = [%49, %c0_i32] : !tt.tensordesc<256x128xui8, #shared2>
+        %asd_211 = arith.divsi %47, %c128_i32 : i32
+        %asd_212 = amdg.update_tensor_descriptor %as_desc add_offsets = [%asd_211, %c0_i32] : !tt.tensordesc<2x1024xui8, #shared>
+        %bsd_213 = arith.divsi %49, %c128_i32 : i32
+        %bsd_214 = amdg.update_tensor_descriptor %bs_desc add_offsets = [%bsd_213, %c0_i32] : !tt.tensordesc<2x1024xui8, #shared>
+        %73 = amdg.update_tensor_descriptor %ad_209 add_offsets = [%c0_i32, %c0_i32] : !tt.tensordesc<256x256xf8E4M3FN, #shared1>
+        %74 = amdg.update_tensor_descriptor %bd_210 add_offsets = [%c0_i32, %c0_i32] : !tt.tensordesc<256x128xui8, #shared2>
+        %75 = amdg.async_tdm_fused_copy_global_to_local %73, %74 into %16, %18 {warp_used_hints = array<i32: 5, 10>} : !tt.tensordesc<256x256xf8E4M3FN, #shared1>, !tt.tensordesc<256x128xui8, #shared2> -> !ttg.memdesc<256x256xf8E4M3FN, #shared1, #smem, mutable>, !ttg.memdesc<256x128xi8, #shared2, #smem, mutable>
+        %76 = amdg.update_tensor_descriptor %asd_212 add_offsets = [%c0_i32, %c0_i32] : !tt.tensordesc<2x1024xui8, #shared>
+        %77 = amdg.update_tensor_descriptor %bsd_214 add_offsets = [%c0_i32, %c0_i32] : !tt.tensordesc<2x1024xui8, #shared>
+        %78 = amdg.async_tdm_fused_copy_global_to_local %76, %77 into %21, %23 {warp_used_hints = array<i32: 5, 10>} : !tt.tensordesc<2x1024xui8, #shared>, !tt.tensordesc<2x1024xui8, #shared> -> !ttg.memdesc<2x1024xi8, #shared, #smem, mutable>, !ttg.memdesc<2x1024xi8, #shared, #smem, mutable>
+        %79 = amdg.async_tdm_wait  {num = 3 : i32}
+        %80 = amdg.update_tensor_descriptor %ad_209 add_offsets = [%c0_i32, %c256_i32] : !tt.tensordesc<256x256xf8E4M3FN, #shared1>
+        %81 = amdg.update_tensor_descriptor %bd_210 add_offsets = [%c0_i32, %c128_i32] : !tt.tensordesc<256x128xui8, #shared2>
+        %82 = amdg.async_tdm_fused_copy_global_to_local %80, %81 into %26, %28 {warp_used_hints = array<i32: 5, 10>} : !tt.tensordesc<256x256xf8E4M3FN, #shared1>, !tt.tensordesc<256x128xui8, #shared2> -> !ttg.memdesc<256x256xf8E4M3FN, #shared1, #smem, mutable>, !ttg.memdesc<256x128xi8, #shared2, #smem, mutable>
+        %83 = amdg.update_tensor_descriptor %asd_212 add_offsets = [%c0_i32, %c1024_i32] : !tt.tensordesc<2x1024xui8, #shared>
+        %84 = amdg.update_tensor_descriptor %bsd_214 add_offsets = [%c0_i32, %c1024_i32] : !tt.tensordesc<2x1024xui8, #shared>
+        %85 = amdg.async_tdm_fused_copy_global_to_local %83, %84 into %31, %33 {warp_used_hints = array<i32: 5, 10>} : !tt.tensordesc<2x1024xui8, #shared>, !tt.tensordesc<2x1024xui8, #shared> -> !ttg.memdesc<2x1024xi8, #shared, #smem, mutable>, !ttg.memdesc<2x1024xi8, #shared, #smem, mutable>
+        %86 = amdg.async_tdm_wait  {num = 4 : i32}
+        %87 = amdg.update_tensor_descriptor %ad_209 add_offsets = [%c0_i32, %c512_i32] : !tt.tensordesc<256x256xf8E4M3FN, #shared1>
+        %88 = amdg.update_tensor_descriptor %bd_210 add_offsets = [%c0_i32, %c256_i32] : !tt.tensordesc<256x128xui8, #shared2>
+        %89 = amdg.async_tdm_fused_copy_global_to_local %87, %88 into %6, %8 {warp_used_hints = array<i32: 5, 10>} : !tt.tensordesc<256x256xf8E4M3FN, #shared1>, !tt.tensordesc<256x128xui8, #shared2> -> !ttg.memdesc<256x256xf8E4M3FN, #shared1, #smem, mutable>, !ttg.memdesc<256x128xi8, #shared2, #smem, mutable>
+        %90 = amdg.update_tensor_descriptor %asd_212 add_offsets = [%c0_i32, %c2048_i32] : !tt.tensordesc<2x1024xui8, #shared>
+        %91 = amdg.update_tensor_descriptor %bsd_214 add_offsets = [%c0_i32, %c2048_i32] : !tt.tensordesc<2x1024xui8, #shared>
+        %92 = amdg.async_tdm_fused_copy_global_to_local %90, %91 into %11, %13 {warp_used_hints = array<i32: 5, 10>} : !tt.tensordesc<2x1024xui8, #shared>, !tt.tensordesc<2x1024xui8, #shared> -> !ttg.memdesc<2x1024xi8, #shared, #smem, mutable>, !ttg.memdesc<2x1024xi8, #shared, #smem, mutable>
+      }
+      scf.yield %c1_i32 : i32
+    }
+    %35 = amdg.async_tdm_wait  {num = 0 : i32}
+    tt.return
+  }
+}
