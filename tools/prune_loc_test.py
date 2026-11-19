@@ -108,7 +108,7 @@ def _sha(text: str) -> str:
 class PruneTreeTest(unittest.TestCase):
     def test_prune_updates_hashes_and_is_idempotent(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            cdir = os.path.join(tmp, "gfx950", "tlx_ops", "mm", "case1")
+            cdir = os.path.join(tmp, "gfx950", "tlx_ops", "mm", "case_1_2_")
             os.makedirs(cdir)
             files = {
                 "ttir": ("kernel.ttir", _MLIR),
@@ -116,10 +116,13 @@ class PruneTreeTest(unittest.TestCase):
                 "amdgcn": ("kernel.amdgcn", _AMDGCN),
             }
             compile_info = {
+                "source": "tlx_ops",
+                "target": "mm",
+                "case": "case_(1, 2)",
                 "files": {
                     stage: {"file": name, "sha256": _sha(text)}
                     for stage, (name, text) in files.items()
-                }
+                },
             }
             for _stage, (name, text) in files.items():
                 with open(os.path.join(cdir, name), "w") as f:
@@ -132,7 +135,7 @@ class PruneTreeTest(unittest.TestCase):
                     {
                         "source": "tlx_ops",
                         "target": "mm",
-                        "case": "case1",
+                        "case": "case_(1, 2)",
                         "files": dict(compile_info["files"]),
                     }
                 ],
@@ -154,7 +157,3 @@ class PruneTreeTest(unittest.TestCase):
                 )
             self.assertEqual(prune_tree(tmp, "gfx950")["bytes_saved"], 0)
             self.assertEqual(main(["--arch", "gfx950", "--out", tmp]), 0)
-
-
-if __name__ == "__main__":
-    unittest.main()

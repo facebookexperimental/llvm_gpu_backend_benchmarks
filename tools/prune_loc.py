@@ -184,7 +184,7 @@ def _prune_case(cdir: str, dry_run: bool) -> tuple[int, int, dict]:
 
 
 def _refresh_hashes(cdir: str, hashes: dict, dry_run: bool) -> dict:
-    """Sync compile.json file hashes. Returns the updated files mapping."""
+    """Sync compile.json file hashes and return its metadata."""
     path = os.path.join(cdir, "compile.json")
     if not os.path.isfile(path):
         return {}
@@ -198,7 +198,7 @@ def _refresh_hashes(cdir: str, hashes: dict, dry_run: bool) -> dict:
         with open(path, "w") as f:
             json.dump(info, f, indent=2, sort_keys=True)
             f.write("\n")
-    return files
+    return info
 
 
 def prune_tree(out_root: str, arch: str, dry_run: bool = False) -> dict:
@@ -210,7 +210,13 @@ def prune_tree(out_root: str, arch: str, dry_run: bool = False) -> dict:
         changed, saved, hashes = _prune_case(cdir, dry_run)
         stats["files_changed"] += changed
         stats["bytes_saved"] += saved
-        updated[(source, target, case)] = _refresh_hashes(cdir, hashes, dry_run)
+        info = _refresh_hashes(cdir, hashes, dry_run)
+        key = (
+            info.get("source", source),
+            info.get("target", target),
+            info.get("case", case),
+        )
+        updated[key] = info.get("files", {})
     manifest_path = os.path.join(out_root, arch, "manifest.json")
     if os.path.isfile(manifest_path):
         with open(manifest_path) as f:
