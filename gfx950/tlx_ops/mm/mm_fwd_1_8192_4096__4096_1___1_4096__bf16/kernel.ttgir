@@ -5,40 +5,40 @@ module attributes {"ttg.cluster-dim-x" = 1 : i32, "ttg.cluster-dim-y" = 1 : i32,
   tt.func public @_gemv_kernel(%a_ptr: !tt.ptr<bf16> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %b_ptr: !tt.ptr<bf16> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %out_ptr: !tt.ptr<bf16> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %N: i32 {tt.divisibility = 16 : i32}, %K: i32 {tt.divisibility = 16 : i32}, %STRIDE_BN: i32 {tt.divisibility = 16 : i32}) attributes {noinline = false} {
     %weights = arith.constant dense<4096> : tensor<8x1xi32, #blocked>
     %weights_0 = arith.constant 32768 : i32
-    %c8_i32 = arith.constant 8 : i32
-    %cols = tt.get_program_id x : i32
-    %cols_1 = arith.muli %cols, %c8_i32 : i32
-    %cols_2 = tt.make_range {end = 8 : i32, start = 0 : i32} : tensor<8xi32, #ttg.slice<{dim = 1, parent = #blocked}>>
-    %cols_3 = tt.make_range {end = 8 : i32, start = 0 : i32} : tensor<8xi32, #blocked1>
-    %cols_4 = tt.splat %cols_1 : i32 -> tensor<8xi32, #blocked1>
-    %cols_5 = arith.addi %cols_4, %cols_3 : tensor<8xi32, #blocked1>
+    %cols = arith.constant 8 : i32
+    %cols_1 = tt.get_program_id x : i32
+    %cols_2 = arith.muli %cols_1, %cols : i32
+    %cols_3 = tt.make_range {end = 8 : i32, start = 0 : i32} : tensor<8xi32, #ttg.slice<{dim = 1, parent = #blocked}>>
+    %cols_4 = tt.make_range {end = 8 : i32, start = 0 : i32} : tensor<8xi32, #blocked1>
+    %cols_5 = tt.splat %cols_2 : i32 -> tensor<8xi32, #blocked1>
+    %cols_6 = arith.addi %cols_5, %cols_4 : tensor<8xi32, #blocked1>
     %reduction = tt.make_range {end = 4096 : i32, start = 0 : i32} : tensor<4096xi32, #blocked2>
     %a = amdg.buffer_load %a_ptr[%reduction] {contiguity = 8 : i32} : !tt.ptr<bf16> -> tensor<4096xbf16, #blocked2>
-    %a_6 = ttg.convert_layout %a : tensor<4096xbf16, #blocked2> -> tensor<4096xbf16, #ttg.slice<{dim = 0, parent = #blocked}>>
-    %a_7 = arith.extf %a_6 : tensor<4096xbf16, #ttg.slice<{dim = 0, parent = #blocked}>> to tensor<4096xf32, #ttg.slice<{dim = 0, parent = #blocked}>>
+    %a_7 = ttg.convert_layout %a : tensor<4096xbf16, #blocked2> -> tensor<4096xbf16, #ttg.slice<{dim = 0, parent = #blocked}>>
+    %a_8 = arith.extf %a_7 : tensor<4096xbf16, #ttg.slice<{dim = 0, parent = #blocked}>> to tensor<4096xf32, #ttg.slice<{dim = 0, parent = #blocked}>>
     %offsets_b = tt.make_range {end = 4096 : i32, start = 0 : i32} : tensor<4096xi32, #ttg.slice<{dim = 0, parent = #blocked}>>
-    %weights_8 = tt.expand_dims %cols_2 {axis = 1 : i32} : tensor<8xi32, #ttg.slice<{dim = 1, parent = #blocked}>> -> tensor<8x1xi32, #blocked>
-    %weights_9 = arith.muli %cols, %weights_0 : i32
-    %weights_10 = arith.muli %weights_8, %weights : tensor<8x1xi32, #blocked>
-    %weights_11 = tt.broadcast %weights_10 : tensor<8x1xi32, #blocked> -> tensor<8x4096xi32, #blocked>
-    %weights_12 = tt.expand_dims %offsets_b {axis = 0 : i32} : tensor<4096xi32, #ttg.slice<{dim = 0, parent = #blocked}>> -> tensor<1x4096xi32, #blocked>
-    %weights_13 = tt.broadcast %weights_12 : tensor<1x4096xi32, #blocked> -> tensor<8x4096xi32, #blocked>
-    %weights_14 = arith.addi %weights_11, %weights_13 : tensor<8x4096xi32, #blocked>
-    %weights_15 = tt.splat %weights_9 : i32 -> tensor<8x4096xi32, #blocked>
-    %weights_16 = arith.addi %weights_15, %weights_14 : tensor<8x4096xi32, #blocked>
-    %weights_17 = amdg.buffer_load %b_ptr[%weights_16] {cachePolicy = #tt.cache_policy<cache_modifier = cg, eviction_policy = evict_normal>, contiguity = 8 : i32} : !tt.ptr<bf16> -> tensor<8x4096xbf16, #blocked>
-    %weights_18 = arith.extf %weights_17 : tensor<8x4096xbf16, #blocked> to tensor<8x4096xf32, #blocked>
-    %result = tt.expand_dims %a_7 {axis = 0 : i32} : tensor<4096xf32, #ttg.slice<{dim = 0, parent = #blocked}>> -> tensor<1x4096xf32, #blocked>
-    %result_19 = tt.broadcast %result : tensor<1x4096xf32, #blocked> -> tensor<8x4096xf32, #blocked>
-    %result_20 = arith.mulf %weights_18, %result_19 : tensor<8x4096xf32, #blocked>
-    %result_21 = "tt.reduce"(%result_20) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
-    ^bb0(%result_22: f32, %result_23: f32):
-      %result_24 = arith.addf %result_22, %result_23 : f32
-      tt.reduce.return %result_24 : f32
+    %weights_9 = tt.expand_dims %cols_3 {axis = 1 : i32} : tensor<8xi32, #ttg.slice<{dim = 1, parent = #blocked}>> -> tensor<8x1xi32, #blocked>
+    %weights_10 = arith.muli %cols_1, %weights_0 : i32
+    %weights_11 = arith.muli %weights_9, %weights : tensor<8x1xi32, #blocked>
+    %weights_12 = tt.broadcast %weights_11 : tensor<8x1xi32, #blocked> -> tensor<8x4096xi32, #blocked>
+    %weights_13 = tt.expand_dims %offsets_b {axis = 0 : i32} : tensor<4096xi32, #ttg.slice<{dim = 0, parent = #blocked}>> -> tensor<1x4096xi32, #blocked>
+    %weights_14 = tt.broadcast %weights_13 : tensor<1x4096xi32, #blocked> -> tensor<8x4096xi32, #blocked>
+    %weights_15 = arith.addi %weights_12, %weights_14 : tensor<8x4096xi32, #blocked>
+    %weights_16 = tt.splat %weights_10 : i32 -> tensor<8x4096xi32, #blocked>
+    %weights_17 = arith.addi %weights_16, %weights_15 : tensor<8x4096xi32, #blocked>
+    %weights_18 = amdg.buffer_load %b_ptr[%weights_17] {cachePolicy = #tt.cache_policy<cache_modifier = cg, eviction_policy = evict_normal>, contiguity = 8 : i32} : !tt.ptr<bf16> -> tensor<8x4096xbf16, #blocked>
+    %weights_19 = arith.extf %weights_18 : tensor<8x4096xbf16, #blocked> to tensor<8x4096xf32, #blocked>
+    %result = tt.expand_dims %a_8 {axis = 0 : i32} : tensor<4096xf32, #ttg.slice<{dim = 0, parent = #blocked}>> -> tensor<1x4096xf32, #blocked>
+    %result_20 = tt.broadcast %result : tensor<1x4096xf32, #blocked> -> tensor<8x4096xf32, #blocked>
+    %result_21 = arith.mulf %weights_19, %result_20 : tensor<8x4096xf32, #blocked>
+    %result_22 = "tt.reduce"(%result_21) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%result_23: f32, %result_24: f32):
+      %result_25 = arith.addf %result_23, %result_24 : f32
+      tt.reduce.return %result_25 : f32
     }) : (tensor<8x4096xf32, #blocked>) -> tensor<8xf32, #ttg.slice<{dim = 1, parent = #blocked}>>
-    %0 = arith.truncf %result_21 : tensor<8xf32, #ttg.slice<{dim = 1, parent = #blocked}>> to tensor<8xbf16, #ttg.slice<{dim = 1, parent = #blocked}>>
+    %0 = arith.truncf %result_22 : tensor<8xf32, #ttg.slice<{dim = 1, parent = #blocked}>> to tensor<8xbf16, #ttg.slice<{dim = 1, parent = #blocked}>>
     %1 = ttg.convert_layout %0 : tensor<8xbf16, #ttg.slice<{dim = 1, parent = #blocked}>> -> tensor<8xbf16, #blocked1>
-    amdg.buffer_store %1, %out_ptr[%cols_5] : !tt.ptr<bf16> -> tensor<8xbf16, #blocked1>
+    amdg.buffer_store %1, %out_ptr[%cols_6] : !tt.ptr<bf16> -> tensor<8xbf16, #blocked1>
     tt.return
   }
 }
