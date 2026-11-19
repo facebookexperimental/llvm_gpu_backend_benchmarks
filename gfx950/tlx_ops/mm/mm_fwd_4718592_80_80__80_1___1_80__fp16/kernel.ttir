@@ -17,7 +17,7 @@ module attributes {"ttg.cluster-dim-x" = 1 : i32, "ttg.cluster-dim-y" = 1 : i32,
     %input_head_rows = arith.constant dense<0> : tensor<64xi32>
     %input_head_rows_5 = arith.constant dense<80> : tensor<64xi32>
     %c128_i32 = arith.constant 128 : i32
-    %c64_i32 = arith.constant 64 : i32
+    %tail_rows = arith.constant 64 : i32
     %c80_i32 = arith.constant 80 : i32
     %c36864_i32 = arith.constant 36864 : i32
     %program = tt.get_program_id x : i32
@@ -27,81 +27,81 @@ module attributes {"ttg.cluster-dim-x" = 1 : i32, "ttg.cluster-dim-y" = 1 : i32,
     %head_rows_6 = tt.make_range {end = 64 : i32, start = 0 : i32} : tensor<64xi32>
     %head_rows_7 = tt.splat %head_rows : i32 -> tensor<64xi32>
     %head_rows_8 = arith.addi %head_rows_7, %head_rows_6 : tensor<64xi32>
-    %tail_rows = arith.addi %head_rows, %c64_i32 : i32
-    %tail_rows_9 = tt.make_range {end = 16 : i32, start = 0 : i32} : tensor<16xi32>
-    %tail_rows_10 = tt.splat %tail_rows : i32 -> tensor<16xi32>
-    %tail_rows_11 = arith.addi %tail_rows_10, %tail_rows_9 : tensor<16xi32>
+    %tail_rows_9 = arith.addi %head_rows, %tail_rows : i32
+    %tail_rows_10 = tt.make_range {end = 16 : i32, start = 0 : i32} : tensor<16xi32>
+    %tail_rows_11 = tt.splat %tail_rows_9 : i32 -> tensor<16xi32>
+    %tail_rows_12 = arith.addi %tail_rows_11, %tail_rows_10 : tensor<16xi32>
     %cols = arith.muli %pid_n, %c128_i32 : i32
-    %cols_12 = tt.make_range {end = 128 : i32, start = 0 : i32} : tensor<128xi32>
-    %cols_13 = tt.splat %cols : i32 -> tensor<128xi32>
-    %cols_14 = arith.addi %cols_13, %cols_12 : tensor<128xi32>
-    %input_head_rows_15 = arith.cmpi slt, %head_rows_8, %input_head_rows_5 : tensor<64xi32>
-    %input_head_rows_16 = arith.select %input_head_rows_15, %head_rows_8, %input_head_rows : tensor<64xi1>, tensor<64xi32>
-    %input_tail_rows_17 = arith.cmpi slt, %tail_rows_11, %input_tail_rows_4 : tensor<16xi32>
-    %input_tail_rows_18 = arith.select %input_tail_rows_17, %tail_rows_11, %input_tail_rows : tensor<16xi1>, tensor<16xi32>
-    %input_cols_19 = arith.cmpi slt, %cols_14, %input_cols : tensor<128xi32>
-    %input_cols_20 = arith.select %input_cols_19, %cols_14, %cst_3 : tensor<128xi1>, tensor<128xi32>
-    %k_mask_21 = arith.cmpi slt, %cols_12, %k_mask : tensor<128xi32>
-    %b_value_22 = tt.expand_dims %k_mask_21 {axis = 1 : i32} : tensor<128xi1> -> tensor<128x1xi1>
-    %b_value_23 = tt.expand_dims %cols_12 {axis = 1 : i32} : tensor<128xi32> -> tensor<128x1xi32>
-    %b_value_24 = tt.splat %b_ptr : !tt.ptr<f16> -> tensor<128x1x!tt.ptr<f16>>
-    %b_value_25 = tt.addptr %b_value_24, %b_value_23 : tensor<128x1x!tt.ptr<f16>>, tensor<128x1xi32>
-    %b_value_26 = tt.expand_dims %input_cols_20 {axis = 0 : i32} : tensor<128xi32> -> tensor<1x128xi32>
-    %b_value_27 = arith.muli %b_value_26, %cst_2 : tensor<1x128xi32>
-    %b_value_28 = tt.broadcast %b_value_25 : tensor<128x1x!tt.ptr<f16>> -> tensor<128x128x!tt.ptr<f16>>
-    %b_value_29 = tt.broadcast %b_value_27 : tensor<1x128xi32> -> tensor<128x128xi32>
-    %b_value_30 = tt.addptr %b_value_28, %b_value_29 : tensor<128x128x!tt.ptr<f16>>, tensor<128x128xi32>
-    %b_value_31 = tt.broadcast %b_value_22 : tensor<128x1xi1> -> tensor<128x128xi1>
-    %b_value_32 = tt.load %b_value_30, %b_value_31, %b_value {cachePolicy = #tt.cache_policy<cache_modifier = cg, eviction_policy = evict_normal>} : tensor<128x128x!tt.ptr<f16>>
-    %a_head_33 = tt.expand_dims %k_mask_21 {axis = 0 : i32} : tensor<128xi1> -> tensor<1x128xi1>
-    %a_head_34 = tt.expand_dims %input_head_rows_16 {axis = 1 : i32} : tensor<64xi32> -> tensor<64x1xi32>
-    %a_head_35 = arith.muli %a_head_34, %cst_1 : tensor<64x1xi32>
-    %a_head_36 = tt.splat %a_ptr : !tt.ptr<f16> -> tensor<64x1x!tt.ptr<f16>>
-    %a_head_37 = tt.addptr %a_head_36, %a_head_35 : tensor<64x1x!tt.ptr<f16>>, tensor<64x1xi32>
-    %a_head_38 = tt.expand_dims %cols_12 {axis = 0 : i32} : tensor<128xi32> -> tensor<1x128xi32>
-    %a_head_39 = tt.broadcast %a_head_37 : tensor<64x1x!tt.ptr<f16>> -> tensor<64x128x!tt.ptr<f16>>
-    %a_head_40 = tt.broadcast %a_head_38 : tensor<1x128xi32> -> tensor<64x128xi32>
-    %a_head_41 = tt.addptr %a_head_39, %a_head_40 : tensor<64x128x!tt.ptr<f16>>, tensor<64x128xi32>
-    %a_head_42 = tt.broadcast %a_head_33 : tensor<1x128xi1> -> tensor<64x128xi1>
-    %a_head_43 = tt.load %a_head_41, %a_head_42, %a_head : tensor<64x128x!tt.ptr<f16>>
-    %a_tail_44 = tt.expand_dims %input_tail_rows_18 {axis = 1 : i32} : tensor<16xi32> -> tensor<16x1xi32>
-    %a_tail_45 = arith.muli %a_tail_44, %cst_0 : tensor<16x1xi32>
-    %a_tail_46 = tt.splat %a_ptr : !tt.ptr<f16> -> tensor<16x1x!tt.ptr<f16>>
-    %a_tail_47 = tt.addptr %a_tail_46, %a_tail_45 : tensor<16x1x!tt.ptr<f16>>, tensor<16x1xi32>
-    %a_tail_48 = tt.broadcast %a_tail_47 : tensor<16x1x!tt.ptr<f16>> -> tensor<16x128x!tt.ptr<f16>>
-    %a_tail_49 = tt.broadcast %a_head_38 : tensor<1x128xi32> -> tensor<16x128xi32>
-    %a_tail_50 = tt.addptr %a_tail_48, %a_tail_49 : tensor<16x128x!tt.ptr<f16>>, tensor<16x128xi32>
-    %a_tail_51 = tt.broadcast %a_head_33 : tensor<1x128xi1> -> tensor<16x128xi1>
-    %a_tail_52 = tt.load %a_tail_50, %a_tail_51, %a_tail : tensor<16x128x!tt.ptr<f16>>
-    %acc_head_53 = tt.dot %a_head_43, %b_value_32, %acc_head : tensor<64x128xf16> * tensor<128x128xf16> -> tensor<64x128xf32>
-    %acc_tail_54 = tt.dot %a_tail_52, %b_value_32, %acc_tail : tensor<16x128xf16> * tensor<128x128xf16> -> tensor<16x128xf32>
+    %cols_13 = tt.make_range {end = 128 : i32, start = 0 : i32} : tensor<128xi32>
+    %cols_14 = tt.splat %cols : i32 -> tensor<128xi32>
+    %cols_15 = arith.addi %cols_14, %cols_13 : tensor<128xi32>
+    %input_head_rows_16 = arith.cmpi slt, %head_rows_8, %input_head_rows_5 : tensor<64xi32>
+    %input_head_rows_17 = arith.select %input_head_rows_16, %head_rows_8, %input_head_rows : tensor<64xi1>, tensor<64xi32>
+    %input_tail_rows_18 = arith.cmpi slt, %tail_rows_12, %input_tail_rows_4 : tensor<16xi32>
+    %input_tail_rows_19 = arith.select %input_tail_rows_18, %tail_rows_12, %input_tail_rows : tensor<16xi1>, tensor<16xi32>
+    %input_cols_20 = arith.cmpi slt, %cols_15, %input_cols : tensor<128xi32>
+    %input_cols_21 = arith.select %input_cols_20, %cols_15, %cst_3 : tensor<128xi1>, tensor<128xi32>
+    %k_mask_22 = arith.cmpi slt, %cols_13, %k_mask : tensor<128xi32>
+    %b_value_23 = tt.expand_dims %k_mask_22 {axis = 1 : i32} : tensor<128xi1> -> tensor<128x1xi1>
+    %b_value_24 = tt.expand_dims %cols_13 {axis = 1 : i32} : tensor<128xi32> -> tensor<128x1xi32>
+    %b_value_25 = tt.splat %b_ptr : !tt.ptr<f16> -> tensor<128x1x!tt.ptr<f16>>
+    %b_value_26 = tt.addptr %b_value_25, %b_value_24 : tensor<128x1x!tt.ptr<f16>>, tensor<128x1xi32>
+    %b_value_27 = tt.expand_dims %input_cols_21 {axis = 0 : i32} : tensor<128xi32> -> tensor<1x128xi32>
+    %b_value_28 = arith.muli %b_value_27, %cst_2 : tensor<1x128xi32>
+    %b_value_29 = tt.broadcast %b_value_26 : tensor<128x1x!tt.ptr<f16>> -> tensor<128x128x!tt.ptr<f16>>
+    %b_value_30 = tt.broadcast %b_value_28 : tensor<1x128xi32> -> tensor<128x128xi32>
+    %b_value_31 = tt.addptr %b_value_29, %b_value_30 : tensor<128x128x!tt.ptr<f16>>, tensor<128x128xi32>
+    %b_value_32 = tt.broadcast %b_value_23 : tensor<128x1xi1> -> tensor<128x128xi1>
+    %b_value_33 = tt.load %b_value_31, %b_value_32, %b_value {cachePolicy = #tt.cache_policy<cache_modifier = cg, eviction_policy = evict_normal>} : tensor<128x128x!tt.ptr<f16>>
+    %a_head_34 = tt.expand_dims %k_mask_22 {axis = 0 : i32} : tensor<128xi1> -> tensor<1x128xi1>
+    %a_head_35 = tt.expand_dims %input_head_rows_17 {axis = 1 : i32} : tensor<64xi32> -> tensor<64x1xi32>
+    %a_head_36 = arith.muli %a_head_35, %cst_1 : tensor<64x1xi32>
+    %a_head_37 = tt.splat %a_ptr : !tt.ptr<f16> -> tensor<64x1x!tt.ptr<f16>>
+    %a_head_38 = tt.addptr %a_head_37, %a_head_36 : tensor<64x1x!tt.ptr<f16>>, tensor<64x1xi32>
+    %a_head_39 = tt.expand_dims %cols_13 {axis = 0 : i32} : tensor<128xi32> -> tensor<1x128xi32>
+    %a_head_40 = tt.broadcast %a_head_38 : tensor<64x1x!tt.ptr<f16>> -> tensor<64x128x!tt.ptr<f16>>
+    %a_head_41 = tt.broadcast %a_head_39 : tensor<1x128xi32> -> tensor<64x128xi32>
+    %a_head_42 = tt.addptr %a_head_40, %a_head_41 : tensor<64x128x!tt.ptr<f16>>, tensor<64x128xi32>
+    %a_head_43 = tt.broadcast %a_head_34 : tensor<1x128xi1> -> tensor<64x128xi1>
+    %a_head_44 = tt.load %a_head_42, %a_head_43, %a_head : tensor<64x128x!tt.ptr<f16>>
+    %a_tail_45 = tt.expand_dims %input_tail_rows_19 {axis = 1 : i32} : tensor<16xi32> -> tensor<16x1xi32>
+    %a_tail_46 = arith.muli %a_tail_45, %cst_0 : tensor<16x1xi32>
+    %a_tail_47 = tt.splat %a_ptr : !tt.ptr<f16> -> tensor<16x1x!tt.ptr<f16>>
+    %a_tail_48 = tt.addptr %a_tail_47, %a_tail_46 : tensor<16x1x!tt.ptr<f16>>, tensor<16x1xi32>
+    %a_tail_49 = tt.broadcast %a_tail_48 : tensor<16x1x!tt.ptr<f16>> -> tensor<16x128x!tt.ptr<f16>>
+    %a_tail_50 = tt.broadcast %a_head_39 : tensor<1x128xi32> -> tensor<16x128xi32>
+    %a_tail_51 = tt.addptr %a_tail_49, %a_tail_50 : tensor<16x128x!tt.ptr<f16>>, tensor<16x128xi32>
+    %a_tail_52 = tt.broadcast %a_head_34 : tensor<1x128xi1> -> tensor<16x128xi1>
+    %a_tail_53 = tt.load %a_tail_51, %a_tail_52, %a_tail : tensor<16x128x!tt.ptr<f16>>
+    %acc_head_54 = tt.dot %a_head_44, %b_value_33, %acc_head : tensor<64x128xf16> * tensor<128x128xf16> -> tensor<64x128xf32>
+    %acc_tail_55 = tt.dot %a_tail_53, %b_value_33, %acc_tail : tensor<16x128xf16> * tensor<128x128xf16> -> tensor<16x128xf32>
     %head_ptrs = tt.expand_dims %head_rows_8 {axis = 1 : i32} : tensor<64xi32> -> tensor<64x1xi32>
-    %head_ptrs_55 = tt.splat %c_ptr : !tt.ptr<f16> -> tensor<64x1x!tt.ptr<f16>>
-    %head_ptrs_56 = tt.addptr %head_ptrs_55, %head_ptrs : tensor<64x1x!tt.ptr<f16>>, tensor<64x1xi32>
-    %head_ptrs_57 = tt.expand_dims %cols_14 {axis = 0 : i32} : tensor<128xi32> -> tensor<1x128xi32>
-    %head_ptrs_58 = arith.muli %head_ptrs_57, %cst_2 : tensor<1x128xi32>
-    %head_ptrs_59 = tt.broadcast %head_ptrs_56 : tensor<64x1x!tt.ptr<f16>> -> tensor<64x128x!tt.ptr<f16>>
-    %head_ptrs_60 = tt.broadcast %head_ptrs_58 : tensor<1x128xi32> -> tensor<64x128xi32>
-    %head_ptrs_61 = tt.addptr %head_ptrs_59, %head_ptrs_60 : tensor<64x128x!tt.ptr<f16>>, tensor<64x128xi32>
-    %tail_ptrs = tt.expand_dims %tail_rows_11 {axis = 1 : i32} : tensor<16xi32> -> tensor<16x1xi32>
-    %tail_ptrs_62 = tt.splat %c_ptr : !tt.ptr<f16> -> tensor<16x1x!tt.ptr<f16>>
-    %tail_ptrs_63 = tt.addptr %tail_ptrs_62, %tail_ptrs : tensor<16x1x!tt.ptr<f16>>, tensor<16x1xi32>
-    %tail_ptrs_64 = tt.broadcast %tail_ptrs_63 : tensor<16x1x!tt.ptr<f16>> -> tensor<16x128x!tt.ptr<f16>>
-    %tail_ptrs_65 = tt.broadcast %head_ptrs_58 : tensor<1x128xi32> -> tensor<16x128xi32>
-    %tail_ptrs_66 = tt.addptr %tail_ptrs_64, %tail_ptrs_65 : tensor<16x128x!tt.ptr<f16>>, tensor<16x128xi32>
+    %head_ptrs_56 = tt.splat %c_ptr : !tt.ptr<f16> -> tensor<64x1x!tt.ptr<f16>>
+    %head_ptrs_57 = tt.addptr %head_ptrs_56, %head_ptrs : tensor<64x1x!tt.ptr<f16>>, tensor<64x1xi32>
+    %head_ptrs_58 = tt.expand_dims %cols_15 {axis = 0 : i32} : tensor<128xi32> -> tensor<1x128xi32>
+    %head_ptrs_59 = arith.muli %head_ptrs_58, %cst_2 : tensor<1x128xi32>
+    %head_ptrs_60 = tt.broadcast %head_ptrs_57 : tensor<64x1x!tt.ptr<f16>> -> tensor<64x128x!tt.ptr<f16>>
+    %head_ptrs_61 = tt.broadcast %head_ptrs_59 : tensor<1x128xi32> -> tensor<64x128xi32>
+    %head_ptrs_62 = tt.addptr %head_ptrs_60, %head_ptrs_61 : tensor<64x128x!tt.ptr<f16>>, tensor<64x128xi32>
+    %tail_ptrs = tt.expand_dims %tail_rows_12 {axis = 1 : i32} : tensor<16xi32> -> tensor<16x1xi32>
+    %tail_ptrs_63 = tt.splat %c_ptr : !tt.ptr<f16> -> tensor<16x1x!tt.ptr<f16>>
+    %tail_ptrs_64 = tt.addptr %tail_ptrs_63, %tail_ptrs : tensor<16x1x!tt.ptr<f16>>, tensor<16x1xi32>
+    %tail_ptrs_65 = tt.broadcast %tail_ptrs_64 : tensor<16x1x!tt.ptr<f16>> -> tensor<16x128x!tt.ptr<f16>>
+    %tail_ptrs_66 = tt.broadcast %head_ptrs_59 : tensor<1x128xi32> -> tensor<16x128xi32>
+    %tail_ptrs_67 = tt.addptr %tail_ptrs_65, %tail_ptrs_66 : tensor<16x128x!tt.ptr<f16>>, tensor<16x128xi32>
     %head_mask = arith.cmpi slt, %head_ptrs, %cst_1 : tensor<64x1xi32>
-    %head_mask_67 = arith.cmpi slt, %head_ptrs_57, %cst : tensor<1x128xi32>
-    %head_mask_68 = tt.broadcast %head_mask : tensor<64x1xi1> -> tensor<64x128xi1>
-    %head_mask_69 = tt.broadcast %head_mask_67 : tensor<1x128xi1> -> tensor<64x128xi1>
-    %head_mask_70 = arith.andi %head_mask_68, %head_mask_69 : tensor<64x128xi1>
+    %head_mask_68 = arith.cmpi slt, %head_ptrs_58, %cst : tensor<1x128xi32>
+    %head_mask_69 = tt.broadcast %head_mask : tensor<64x1xi1> -> tensor<64x128xi1>
+    %head_mask_70 = tt.broadcast %head_mask_68 : tensor<1x128xi1> -> tensor<64x128xi1>
+    %head_mask_71 = arith.andi %head_mask_69, %head_mask_70 : tensor<64x128xi1>
     %tail_mask = arith.cmpi slt, %tail_ptrs, %cst_0 : tensor<16x1xi32>
-    %tail_mask_71 = tt.broadcast %tail_mask : tensor<16x1xi1> -> tensor<16x128xi1>
-    %tail_mask_72 = tt.broadcast %head_mask_67 : tensor<1x128xi1> -> tensor<16x128xi1>
-    %tail_mask_73 = arith.andi %tail_mask_71, %tail_mask_72 : tensor<16x128xi1>
-    %0 = arith.truncf %acc_head_53 : tensor<64x128xf32> to tensor<64x128xf16>
-    tt.store %head_ptrs_61, %0, %head_mask_70 : tensor<64x128x!tt.ptr<f16>>
-    %1 = arith.truncf %acc_tail_54 : tensor<16x128xf32> to tensor<16x128xf16>
-    tt.store %tail_ptrs_66, %1, %tail_mask_73 : tensor<16x128x!tt.ptr<f16>>
+    %tail_mask_72 = tt.broadcast %tail_mask : tensor<16x1xi1> -> tensor<16x128xi1>
+    %tail_mask_73 = tt.broadcast %head_mask_68 : tensor<1x128xi1> -> tensor<16x128xi1>
+    %tail_mask_74 = arith.andi %tail_mask_72, %tail_mask_73 : tensor<16x128xi1>
+    %0 = arith.truncf %acc_head_54 : tensor<64x128xf32> to tensor<64x128xf16>
+    tt.store %head_ptrs_62, %0, %head_mask_71 : tensor<64x128x!tt.ptr<f16>>
+    %1 = arith.truncf %acc_tail_55 : tensor<16x128xf32> to tensor<16x128xf16>
+    tt.store %tail_ptrs_67, %1, %tail_mask_74 : tensor<16x128x!tt.ptr<f16>>
     tt.return
   }
 }
