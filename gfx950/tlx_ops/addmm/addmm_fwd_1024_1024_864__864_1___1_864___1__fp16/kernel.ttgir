@@ -17,11 +17,10 @@ module attributes {"ttg.cluster-dim-x" = 1 : i32, "ttg.cluster-dim-y" = 1 : i32,
     %c55296_i32 = arith.constant 55296 : i32
     %c768_i32 = arith.constant 768 : i32
     %bias = arith.constant dense<1024> : tensor<64xi32, #ttg.slice<{dim = 0, parent = #blocked2}>>
+    %k_mask = arith.constant dense<96> : tensor<128xi32, #ttg.slice<{dim = 0, parent = #blocked1}>>
+    %k_mask_1 = arith.constant dense<96> : tensor<128xi32, #ttg.slice<{dim = 1, parent = #blocked}>>
     %mask = arith.constant dense<1024> : tensor<1x64xi32, #blocked2>
-    %cst_1 = arith.constant dense<1024> : tensor<64x1xi32, #blocked2>
-    %k_mask = arith.constant dense<96> : tensor<128xi32, #ttg.slice<{dim = 1, parent = #blocked}>>
-    %k_mask_2 = arith.constant dense<96> : tensor<128xi32, #ttg.slice<{dim = 0, parent = #blocked1}>>
-    %c128_i32 = arith.constant 128 : i32
+    %cst_2 = arith.constant dense<1024> : tensor<64x1xi32, #blocked2>
     %true = arith.constant true
     %c64_i32 = arith.constant 64 : i32
     %c0_i32 = arith.constant 0 : i32
@@ -30,6 +29,7 @@ module attributes {"ttg.cluster-dim-x" = 1 : i32, "ttg.cluster-dim-y" = 1 : i32,
     %a = arith.constant dense<0.000000e+00> : tensor<64x128xf16, #blocked1>
     %b = arith.constant dense<0.000000e+00> : tensor<128x64xf16, #blocked>
     %c1_i32 = arith.constant 1 : i32
+    %c128_i32 = arith.constant 128 : i32
     %cst_3 = arith.constant dense<0.000000e+00> : tensor<64x64xf32, #mma>
     %acc = arith.constant 3 : i32
     %c2_i32 = arith.constant 2 : i32
@@ -56,12 +56,12 @@ module attributes {"ttg.cluster-dim-x" = 1 : i32, "ttg.cluster-dim-y" = 1 : i32,
     %input_rows_14 = tt.splat %input_rows : i32 -> tensor<64xi32, #ttg.slice<{dim = 1, parent = #blocked2}>>
     %input_cols = arith.muli %pid_n_7, %c64_i32 : i32
     %input_cols_15 = tt.splat %input_cols : i32 -> tensor<64xi32, #ttg.slice<{dim = 0, parent = #blocked2}>>
+    llvm.intr.assume %true : i1
+    llvm.intr.assume %true : i1
+    llvm.intr.assume %true : i1
+    llvm.intr.assume %true : i1
     %offs_k = tt.make_range {end = 128 : i32, start = 0 : i32} : tensor<128xi32, #ttg.slice<{dim = 0, parent = #blocked1}>>
     %offs_k_16 = tt.make_range {end = 128 : i32, start = 0 : i32} : tensor<128xi32, #ttg.slice<{dim = 1, parent = #blocked}>>
-    llvm.intr.assume %true : i1
-    llvm.intr.assume %true : i1
-    llvm.intr.assume %true : i1
-    llvm.intr.assume %true : i1
     %a_ptrs_17 = arith.muli %pid_m_6, %c55296_i32 : i32
     %a_ptrs_18 = tt.make_range {end = 128 : i32, start = 0 : i32} : tensor<128xi32, #ttg.slice<{dim = 0, parent = #linear1}>>
     %b_ptrs_19 = tt.make_range {end = 128 : i32, start = 0 : i32} : tensor<128xi32, #ttg.slice<{dim = 1, parent = #linear}>>
@@ -136,8 +136,8 @@ module attributes {"ttg.cluster-dim-x" = 1 : i32, "ttg.cluster-dim-y" = 1 : i32,
     %acc_65 = tt.dot %a_63, %b_64, %acc_61 : tensor<64x128xf16, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 8}>> * tensor<128x64xf16, #ttg.dot_op<{opIdx = 1, parent = #mma, kWidth = 8}>> -> tensor<64x64xf32, #mma>
     ttg.local_dealloc %b_21 : !ttg.memdesc<3x128x64xf16, #shared1, #smem, mutable>
     ttg.local_dealloc %a_20 : !ttg.memdesc<3x64x128xf16, #shared, #smem, mutable>
-    %k_mask_66 = arith.cmpi slt, %offs_k, %k_mask_2 : tensor<128xi32, #ttg.slice<{dim = 0, parent = #blocked1}>>
-    %k_mask_67 = arith.cmpi slt, %offs_k_16, %k_mask : tensor<128xi32, #ttg.slice<{dim = 1, parent = #blocked}>>
+    %k_mask_66 = arith.cmpi slt, %offs_k, %k_mask : tensor<128xi32, #ttg.slice<{dim = 0, parent = #blocked1}>>
+    %k_mask_67 = arith.cmpi slt, %offs_k_16, %k_mask_1 : tensor<128xi32, #ttg.slice<{dim = 1, parent = #blocked}>>
     %a_ptrs_68 = tt.expand_dims %input_rows_9 {axis = 1 : i32} : tensor<64xi32, #ttg.slice<{dim = 1, parent = #blocked1}>> -> tensor<64x1xi32, #blocked1>
     %a_ptrs_69 = arith.muli %a_ptrs_68, %a_ptrs : tensor<64x1xi32, #blocked1>
     %a_ptrs_70 = tt.broadcast %a_ptrs_69 : tensor<64x1xi32, #blocked1> -> tensor<64x128xi32, #blocked1>
@@ -170,7 +170,7 @@ module attributes {"ttg.cluster-dim-x" = 1 : i32, "ttg.cluster-dim-y" = 1 : i32,
     %cols = arith.addi %input_cols_15, %input_rows_13 : tensor<64xi32, #ttg.slice<{dim = 0, parent = #blocked2}>>
     %idx_m = tt.expand_dims %rows {axis = 1 : i32} : tensor<64xi32, #ttg.slice<{dim = 1, parent = #blocked2}>> -> tensor<64x1xi32, #blocked2>
     %idx_n = tt.expand_dims %cols {axis = 0 : i32} : tensor<64xi32, #ttg.slice<{dim = 0, parent = #blocked2}>> -> tensor<1x64xi32, #blocked2>
-    %mask_96 = arith.cmpi slt, %idx_m, %cst_1 : tensor<64x1xi32, #blocked2>
+    %mask_96 = arith.cmpi slt, %idx_m, %cst_2 : tensor<64x1xi32, #blocked2>
     %mask_97 = arith.cmpi slt, %idx_n, %mask : tensor<1x64xi32, #blocked2>
     %mask_98 = tt.broadcast %mask_96 : tensor<64x1xi1, #blocked2> -> tensor<64x64xi1, #blocked2>
     %mask_99 = tt.broadcast %mask_97 : tensor<1x64xi1, #blocked2> -> tensor<64x64xi1, #blocked2>
@@ -183,7 +183,7 @@ module attributes {"ttg.cluster-dim-x" = 1 : i32, "ttg.cluster-dim-y" = 1 : i32,
     %acc_106 = arith.addf %acc_95, %acc_105 : tensor<64x64xf32, #blocked2>
     %2 = tt.expand_dims %input_rows_12 {axis = 1 : i32} : tensor<64xi32, #ttg.slice<{dim = 1, parent = #blocked2}>> -> tensor<64x1xi32, #blocked2>
     %3 = arith.muli %pid_m_6, %c65536_i32 : i32
-    %4 = arith.muli %2, %cst_1 : tensor<64x1xi32, #blocked2>
+    %4 = arith.muli %2, %cst_2 : tensor<64x1xi32, #blocked2>
     %5 = tt.broadcast %4 : tensor<64x1xi32, #blocked2> -> tensor<64x64xi32, #blocked2>
     %6 = tt.expand_dims %input_rows_13 {axis = 0 : i32} : tensor<64xi32, #ttg.slice<{dim = 0, parent = #blocked2}>> -> tensor<1x64xi32, #blocked2>
     %7 = tt.broadcast %6 : tensor<1x64xi32, #blocked2> -> tensor<64x64xi32, #blocked2>
