@@ -18,7 +18,7 @@ module attributes {tlx.has_explicit_local_mem_access = true, tlx.has_tlx_ops = t
     %cst_4 = arith.constant dense<0.0956380739> : tensor<256x64xf32, #mma>
     %cst_5 = arith.constant dense<0xFF800000> : tensor<256x64xf32, #mma>
     %n_blocks = arith.constant 3 : i32
-    %c256_i32 = arith.constant 256 : i32
+    %offs_m = arith.constant 256 : i32
     %c19200_i32 = arith.constant 19200 : i32
     %state_6 = arith.constant 2 : i32
     %state_7 = arith.constant 1 : i32
@@ -58,216 +58,216 @@ module attributes {tlx.has_explicit_local_mem_access = true, tlx.has_tlx_ops = t
     %q_off_12 = arith.addi %q_off, %q_off_11 : i32
     %local_m = tt.make_range {end = 256 : i32, start = 0 : i32} : tensor<256xi32, #ttg.slice<{dim = 1, parent = #blocked}>>
     %local_m_13 = tt.make_range {end = 256 : i32, start = 0 : i32} : tensor<256xi32, #ttg.slice<{dim = 1, parent = #linear1}>>
-    %offs_m = arith.muli %raw_pid_m, %c256_i32 : i32
-    %offs_m_14 = tt.splat %offs_m : i32 -> tensor<256xi32, #ttg.slice<{dim = 1, parent = #linear1}>>
-    %offs_m_15 = tt.splat %offs_m : i32 -> tensor<256xi32, #ttg.slice<{dim = 1, parent = #blocked}>>
-    %offs_m_16 = arith.addi %offs_m_14, %local_m_13 : tensor<256xi32, #ttg.slice<{dim = 1, parent = #linear1}>>
-    %offs_m_17 = arith.addi %offs_m_15, %local_m : tensor<256xi32, #ttg.slice<{dim = 1, parent = #blocked}>>
+    %offs_m_14 = arith.muli %raw_pid_m, %offs_m : i32
+    %offs_m_15 = tt.splat %offs_m_14 : i32 -> tensor<256xi32, #ttg.slice<{dim = 1, parent = #linear1}>>
+    %offs_m_16 = tt.splat %offs_m_14 : i32 -> tensor<256xi32, #ttg.slice<{dim = 1, parent = #blocked}>>
+    %offs_m_17 = arith.addi %offs_m_15, %local_m_13 : tensor<256xi32, #ttg.slice<{dim = 1, parent = #linear1}>>
+    %offs_m_18 = arith.addi %offs_m_16, %local_m : tensor<256xi32, #ttg.slice<{dim = 1, parent = #blocked}>>
     %offs_n = tt.make_range {end = 64 : i32, start = 0 : i32} : tensor<64xi32, #ttg.slice<{dim = 1, parent = #linear}>>
-    %offs_n_18 = tt.make_range {end = 64 : i32, start = 0 : i32} : tensor<64xi32, #ttg.slice<{dim = 0, parent = #mma}>>
-    %q_ptrs = tt.expand_dims %offs_m_16 {axis = 1 : i32} : tensor<256xi32, #ttg.slice<{dim = 1, parent = #linear1}>> -> tensor<256x1xi32, #linear1>
-    %q_ptrs_19 = tt.expand_dims %offs_m_17 {axis = 1 : i32} : tensor<256xi32, #ttg.slice<{dim = 1, parent = #blocked}>> -> tensor<256x1xi32, #blocked>
-    %q_ptrs_20 = arith.muli %offs_m, %stride_qm : i32
-    %q_ptrs_21 = tt.make_range {end = 128 : i32, start = 0 : i32} : tensor<128xi32, #ttg.slice<{dim = 0, parent = #linear}>>
-    %q_ptrs_22 = tt.make_range {end = 128 : i32, start = 0 : i32} : tensor<128xi32, #ttg.slice<{dim = 0, parent = #blocked}>>
-    %q_ptrs_23 = tt.make_range {end = 128 : i32, start = 0 : i32} : tensor<128xi32, #ttg.slice<{dim = 0, parent = #linear1}>>
-    %q_ptrs_24 = tt.expand_dims %local_m {axis = 1 : i32} : tensor<256xi32, #ttg.slice<{dim = 1, parent = #blocked}>> -> tensor<256x1xi32, #blocked>
-    %q_ptrs_25 = tt.splat %stride_qm : i32 -> tensor<256x1xi32, #blocked>
-    %q_ptrs_26 = arith.muli %q_ptrs_24, %q_ptrs_25 : tensor<256x1xi32, #blocked>
-    %q_ptrs_27 = arith.addi %q_ptrs_20, %q_off_12 : i32
-    %q_ptrs_28 = tt.broadcast %q_ptrs_26 : tensor<256x1xi32, #blocked> -> tensor<256x128xi32, #blocked>
-    %q_ptrs_29 = tt.expand_dims %q_ptrs_22 {axis = 0 : i32} : tensor<128xi32, #ttg.slice<{dim = 0, parent = #blocked}>> -> tensor<1x128xi32, #blocked>
-    %q_ptrs_30 = tt.broadcast %q_ptrs_29 : tensor<1x128xi32, #blocked> -> tensor<256x128xi32, #blocked>
-    %q_ptrs_31 = arith.addi %q_ptrs_28, %q_ptrs_30 : tensor<256x128xi32, #blocked>
-    %q_ptrs_32 = tt.splat %q_ptrs_27 : i32 -> tensor<256x128xi32, #blocked>
-    %q_ptrs_33 = arith.addi %q_ptrs_32, %q_ptrs_31 : tensor<256x128xi32, #blocked>
-    %q_34 = arith.cmpi slt, %q_ptrs, %cst_10 : tensor<256x1xi32, #linear1>
-    %q_35 = arith.cmpi slt, %q_ptrs_19, %cst : tensor<256x1xi32, #blocked>
-    %q_36 = tt.broadcast %q_34 : tensor<256x1xi1, #linear1> -> tensor<256x128xi1, #linear1>
-    %q_37 = tt.broadcast %q_35 : tensor<256x1xi1, #blocked> -> tensor<256x128xi1, #blocked>
-    %q_38 = amdg.buffer_load %Q[%q_ptrs_33], %q_37, %q {contiguity = 8 : i32} : !tt.ptr<bf16> -> tensor<256x128xbf16, #blocked>
-    %q_39 = ttg.convert_layout %q_38 : tensor<256x128xbf16, #blocked> -> tensor<256x128xbf16, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 8}>>
-    %state_40 = ttg.async_wait {num = 0 : i32}
-    %state.m_i_41:3 = scf.for %chunk_start = %c0_i32 to %n_blocks step %state_6 iter_args(%state_55 = %state.m_i, %state.l_i = %cst_2, %state.m_i_56 = %state_3) -> (tensor<256x128xf32, #mma>, tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>, tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>)  : i32 {
-      %state_57 = arith.cmpi slt, %chunk_start, %n_blocks : i32
-      scf.if %state_57 {
+    %offs_n_19 = tt.make_range {end = 64 : i32, start = 0 : i32} : tensor<64xi32, #ttg.slice<{dim = 0, parent = #mma}>>
+    %q_ptrs = tt.expand_dims %offs_m_17 {axis = 1 : i32} : tensor<256xi32, #ttg.slice<{dim = 1, parent = #linear1}>> -> tensor<256x1xi32, #linear1>
+    %q_ptrs_20 = tt.expand_dims %offs_m_18 {axis = 1 : i32} : tensor<256xi32, #ttg.slice<{dim = 1, parent = #blocked}>> -> tensor<256x1xi32, #blocked>
+    %q_ptrs_21 = arith.muli %offs_m_14, %stride_qm : i32
+    %q_ptrs_22 = tt.make_range {end = 128 : i32, start = 0 : i32} : tensor<128xi32, #ttg.slice<{dim = 0, parent = #linear}>>
+    %q_ptrs_23 = tt.make_range {end = 128 : i32, start = 0 : i32} : tensor<128xi32, #ttg.slice<{dim = 0, parent = #blocked}>>
+    %q_ptrs_24 = tt.make_range {end = 128 : i32, start = 0 : i32} : tensor<128xi32, #ttg.slice<{dim = 0, parent = #linear1}>>
+    %q_ptrs_25 = tt.expand_dims %local_m {axis = 1 : i32} : tensor<256xi32, #ttg.slice<{dim = 1, parent = #blocked}>> -> tensor<256x1xi32, #blocked>
+    %q_ptrs_26 = tt.splat %stride_qm : i32 -> tensor<256x1xi32, #blocked>
+    %q_ptrs_27 = arith.muli %q_ptrs_25, %q_ptrs_26 : tensor<256x1xi32, #blocked>
+    %q_ptrs_28 = arith.addi %q_ptrs_21, %q_off_12 : i32
+    %q_ptrs_29 = tt.broadcast %q_ptrs_27 : tensor<256x1xi32, #blocked> -> tensor<256x128xi32, #blocked>
+    %q_ptrs_30 = tt.expand_dims %q_ptrs_23 {axis = 0 : i32} : tensor<128xi32, #ttg.slice<{dim = 0, parent = #blocked}>> -> tensor<1x128xi32, #blocked>
+    %q_ptrs_31 = tt.broadcast %q_ptrs_30 : tensor<1x128xi32, #blocked> -> tensor<256x128xi32, #blocked>
+    %q_ptrs_32 = arith.addi %q_ptrs_29, %q_ptrs_31 : tensor<256x128xi32, #blocked>
+    %q_ptrs_33 = tt.splat %q_ptrs_28 : i32 -> tensor<256x128xi32, #blocked>
+    %q_ptrs_34 = arith.addi %q_ptrs_33, %q_ptrs_32 : tensor<256x128xi32, #blocked>
+    %q_35 = arith.cmpi slt, %q_ptrs, %cst_10 : tensor<256x1xi32, #linear1>
+    %q_36 = arith.cmpi slt, %q_ptrs_20, %cst : tensor<256x1xi32, #blocked>
+    %q_37 = tt.broadcast %q_35 : tensor<256x1xi1, #linear1> -> tensor<256x128xi1, #linear1>
+    %q_38 = tt.broadcast %q_36 : tensor<256x1xi1, #blocked> -> tensor<256x128xi1, #blocked>
+    %q_39 = amdg.buffer_load %Q[%q_ptrs_34], %q_38, %q {contiguity = 8 : i32} : !tt.ptr<bf16> -> tensor<256x128xbf16, #blocked>
+    %q_40 = ttg.convert_layout %q_39 : tensor<256x128xbf16, #blocked> -> tensor<256x128xbf16, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 8}>>
+    %state_41 = ttg.async_wait {num = 0 : i32}
+    %state.m_i_42:3 = scf.for %chunk_start = %c0_i32 to %n_blocks step %state_6 iter_args(%state_56 = %state.m_i, %state.l_i = %cst_2, %state.m_i_57 = %state_3) -> (tensor<256x128xf32, #mma>, tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>, tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>)  : i32 {
+      %state_58 = arith.cmpi slt, %chunk_start, %n_blocks : i32
+      scf.if %state_58 {
         %start_n = arith.muli %chunk_start, %state_8 : i32
         %mask = tt.splat %start_n : i32 -> tensor<64xi32, #ttg.slice<{dim = 1, parent = #linear}>>
-        %mask_61 = arith.addi %mask, %offs_n : tensor<64xi32, #ttg.slice<{dim = 1, parent = #linear}>>
-        %mask_62 = tt.expand_dims %mask_61 {axis = 1 : i32} : tensor<64xi32, #ttg.slice<{dim = 1, parent = #linear}>> -> tensor<64x1xi32, #linear>
-        %mask_63 = arith.cmpi slt, %mask_62, %state_9 : tensor<64x1xi32, #linear>
+        %mask_62 = arith.addi %mask, %offs_n : tensor<64xi32, #ttg.slice<{dim = 1, parent = #linear}>>
+        %mask_63 = tt.expand_dims %mask_62 {axis = 1 : i32} : tensor<64xi32, #ttg.slice<{dim = 1, parent = #linear}>> -> tensor<64x1xi32, #linear>
+        %mask_64 = arith.cmpi slt, %mask_63, %state_9 : tensor<64x1xi32, #linear>
         %tok_k = arith.muli %start_n, %stride_kn : i32
-        %tok_k_64 = tt.splat %tok_k : i32 -> tensor<64x128xi32, #linear>
-        %tok_k_65 = tt.expand_dims %offs_n {axis = 1 : i32} : tensor<64xi32, #ttg.slice<{dim = 1, parent = #linear}>> -> tensor<64x1xi32, #linear>
-        %tok_k_66 = tt.splat %stride_kn : i32 -> tensor<64x1xi32, #linear>
-        %tok_k_67 = arith.muli %tok_k_65, %tok_k_66 : tensor<64x1xi32, #linear>
-        %tok_k_68 = tt.broadcast %tok_k_67 : tensor<64x1xi32, #linear> -> tensor<64x128xi32, #linear>
-        %tok_k_69 = tt.expand_dims %q_ptrs_21 {axis = 0 : i32} : tensor<128xi32, #ttg.slice<{dim = 0, parent = #linear}>> -> tensor<1x128xi32, #linear>
-        %tok_k_70 = tt.broadcast %tok_k_69 : tensor<1x128xi32, #linear> -> tensor<64x128xi32, #linear>
-        %tok_k_71 = arith.addi %tok_k_68, %tok_k_70 : tensor<64x128xi32, #linear>
-        %tok_k_72 = arith.addi %tok_k_71, %tok_k_64 : tensor<64x128xi32, #linear>
-        %tok_k_73 = tt.splat %q_off_12 : i32 -> tensor<64x128xi32, #linear>
-        %tok_k_74 = arith.addi %tok_k_73, %tok_k_72 : tensor<64x128xi32, #linear>
-        %tok_k_75 = ttg.memdesc_index %k_buf[%c0_i32] : !ttg.memdesc<2x64x128xbf16, #shared, #smem, mutable> -> !ttg.memdesc<64x128xbf16, #shared, #smem, mutable>
-        %tok_k_76 = tt.broadcast %mask_63 : tensor<64x1xi1, #linear> -> tensor<64x128xi1, #linear>
-        %tok_k_77 = amdg.buffer_load_to_local %K[%tok_k_74] mask = %tok_k_76 other = %cst_1 into %tok_k_75 {contiguity = 8 : i32} : !tt.ptr<bf16>[tensor<64x128xi32, #linear>] tensor<64x128xbf16, #linear> -> <64x128xbf16, #shared, #smem, mutable>
+        %tok_k_65 = tt.splat %tok_k : i32 -> tensor<64x128xi32, #linear>
+        %tok_k_66 = tt.expand_dims %offs_n {axis = 1 : i32} : tensor<64xi32, #ttg.slice<{dim = 1, parent = #linear}>> -> tensor<64x1xi32, #linear>
+        %tok_k_67 = tt.splat %stride_kn : i32 -> tensor<64x1xi32, #linear>
+        %tok_k_68 = arith.muli %tok_k_66, %tok_k_67 : tensor<64x1xi32, #linear>
+        %tok_k_69 = tt.broadcast %tok_k_68 : tensor<64x1xi32, #linear> -> tensor<64x128xi32, #linear>
+        %tok_k_70 = tt.expand_dims %q_ptrs_22 {axis = 0 : i32} : tensor<128xi32, #ttg.slice<{dim = 0, parent = #linear}>> -> tensor<1x128xi32, #linear>
+        %tok_k_71 = tt.broadcast %tok_k_70 : tensor<1x128xi32, #linear> -> tensor<64x128xi32, #linear>
+        %tok_k_72 = arith.addi %tok_k_69, %tok_k_71 : tensor<64x128xi32, #linear>
+        %tok_k_73 = arith.addi %tok_k_72, %tok_k_65 : tensor<64x128xi32, #linear>
+        %tok_k_74 = tt.splat %q_off_12 : i32 -> tensor<64x128xi32, #linear>
+        %tok_k_75 = arith.addi %tok_k_74, %tok_k_73 : tensor<64x128xi32, #linear>
+        %tok_k_76 = ttg.memdesc_index %k_buf[%c0_i32] : !ttg.memdesc<2x64x128xbf16, #shared, #smem, mutable> -> !ttg.memdesc<64x128xbf16, #shared, #smem, mutable>
+        %tok_k_77 = tt.broadcast %mask_64 : tensor<64x1xi1, #linear> -> tensor<64x128xi1, #linear>
+        %tok_k_78 = amdg.buffer_load_to_local %K[%tok_k_75] mask = %tok_k_77 other = %cst_1 into %tok_k_76 {contiguity = 8 : i32} : !tt.ptr<bf16>[tensor<64x128xi32, #linear>] tensor<64x128xbf16, #linear> -> <64x128xbf16, #shared, #smem, mutable>
         %tok_v = arith.muli %start_n, %stride_vn : i32
-        %tok_v_78 = tt.splat %tok_v : i32 -> tensor<64x128xi32, #linear>
-        %tok_v_79 = tt.splat %stride_vn : i32 -> tensor<64x1xi32, #linear>
-        %tok_v_80 = arith.muli %tok_k_65, %tok_v_79 : tensor<64x1xi32, #linear>
-        %tok_v_81 = tt.broadcast %tok_v_80 : tensor<64x1xi32, #linear> -> tensor<64x128xi32, #linear>
-        %tok_v_82 = arith.addi %tok_v_81, %tok_k_70 : tensor<64x128xi32, #linear>
-        %tok_v_83 = arith.addi %tok_v_82, %tok_v_78 : tensor<64x128xi32, #linear>
-        %tok_v_84 = arith.addi %tok_k_73, %tok_v_83 : tensor<64x128xi32, #linear>
-        %tok_v_85 = ttg.memdesc_index %v_buf[%c0_i32] : !ttg.memdesc<2x64x128xbf16, #shared1, #smem, mutable> -> !ttg.memdesc<64x128xbf16, #shared1, #smem, mutable>
-        %tok_v_86 = amdg.buffer_load_to_local %V[%tok_v_84] mask = %tok_k_76 other = %cst_1 into %tok_v_85 {contiguity = 8 : i32} : !tt.ptr<bf16>[tensor<64x128xi32, #linear>] tensor<64x128xbf16, #linear> -> <64x128xbf16, #shared1, #smem, mutable>
-        %state_87 = ttg.async_commit_group tokens %tok_k_77, %tok_v_86
+        %tok_v_79 = tt.splat %tok_v : i32 -> tensor<64x128xi32, #linear>
+        %tok_v_80 = tt.splat %stride_vn : i32 -> tensor<64x1xi32, #linear>
+        %tok_v_81 = arith.muli %tok_k_66, %tok_v_80 : tensor<64x1xi32, #linear>
+        %tok_v_82 = tt.broadcast %tok_v_81 : tensor<64x1xi32, #linear> -> tensor<64x128xi32, #linear>
+        %tok_v_83 = arith.addi %tok_v_82, %tok_k_71 : tensor<64x128xi32, #linear>
+        %tok_v_84 = arith.addi %tok_v_83, %tok_v_79 : tensor<64x128xi32, #linear>
+        %tok_v_85 = arith.addi %tok_k_74, %tok_v_84 : tensor<64x128xi32, #linear>
+        %tok_v_86 = ttg.memdesc_index %v_buf[%c0_i32] : !ttg.memdesc<2x64x128xbf16, #shared1, #smem, mutable> -> !ttg.memdesc<64x128xbf16, #shared1, #smem, mutable>
+        %tok_v_87 = amdg.buffer_load_to_local %V[%tok_v_85] mask = %tok_k_77 other = %cst_1 into %tok_v_86 {contiguity = 8 : i32} : !tt.ptr<bf16>[tensor<64x128xi32, #linear>] tensor<64x128xbf16, #linear> -> <64x128xbf16, #shared1, #smem, mutable>
+        %state_88 = ttg.async_commit_group tokens %tok_k_78, %tok_v_87
       }
       %block_offset = arith.addi %chunk_start, %state_7 : i32
-      %state_58 = arith.cmpi slt, %block_offset, %n_blocks : i32
-      scf.if %state_58 {
+      %state_59 = arith.cmpi slt, %block_offset, %n_blocks : i32
+      scf.if %state_59 {
         %start_n = arith.muli %block_offset, %state_8 : i32
         %mask = tt.splat %start_n : i32 -> tensor<64xi32, #ttg.slice<{dim = 1, parent = #linear}>>
-        %mask_61 = arith.addi %mask, %offs_n : tensor<64xi32, #ttg.slice<{dim = 1, parent = #linear}>>
-        %mask_62 = tt.expand_dims %mask_61 {axis = 1 : i32} : tensor<64xi32, #ttg.slice<{dim = 1, parent = #linear}>> -> tensor<64x1xi32, #linear>
-        %mask_63 = arith.cmpi slt, %mask_62, %state_9 : tensor<64x1xi32, #linear>
+        %mask_62 = arith.addi %mask, %offs_n : tensor<64xi32, #ttg.slice<{dim = 1, parent = #linear}>>
+        %mask_63 = tt.expand_dims %mask_62 {axis = 1 : i32} : tensor<64xi32, #ttg.slice<{dim = 1, parent = #linear}>> -> tensor<64x1xi32, #linear>
+        %mask_64 = arith.cmpi slt, %mask_63, %state_9 : tensor<64x1xi32, #linear>
         %tok_k = arith.muli %start_n, %stride_kn : i32
-        %tok_k_64 = tt.splat %tok_k : i32 -> tensor<64x128xi32, #linear>
-        %tok_k_65 = tt.expand_dims %offs_n {axis = 1 : i32} : tensor<64xi32, #ttg.slice<{dim = 1, parent = #linear}>> -> tensor<64x1xi32, #linear>
-        %tok_k_66 = tt.splat %stride_kn : i32 -> tensor<64x1xi32, #linear>
-        %tok_k_67 = arith.muli %tok_k_65, %tok_k_66 : tensor<64x1xi32, #linear>
-        %tok_k_68 = tt.broadcast %tok_k_67 : tensor<64x1xi32, #linear> -> tensor<64x128xi32, #linear>
-        %tok_k_69 = tt.expand_dims %q_ptrs_21 {axis = 0 : i32} : tensor<128xi32, #ttg.slice<{dim = 0, parent = #linear}>> -> tensor<1x128xi32, #linear>
-        %tok_k_70 = tt.broadcast %tok_k_69 : tensor<1x128xi32, #linear> -> tensor<64x128xi32, #linear>
-        %tok_k_71 = arith.addi %tok_k_68, %tok_k_70 : tensor<64x128xi32, #linear>
-        %tok_k_72 = arith.addi %tok_k_71, %tok_k_64 : tensor<64x128xi32, #linear>
-        %tok_k_73 = tt.splat %q_off_12 : i32 -> tensor<64x128xi32, #linear>
-        %tok_k_74 = arith.addi %tok_k_73, %tok_k_72 : tensor<64x128xi32, #linear>
-        %tok_k_75 = ttg.memdesc_index %k_buf[%state_7] : !ttg.memdesc<2x64x128xbf16, #shared, #smem, mutable> -> !ttg.memdesc<64x128xbf16, #shared, #smem, mutable>
-        %tok_k_76 = tt.broadcast %mask_63 : tensor<64x1xi1, #linear> -> tensor<64x128xi1, #linear>
-        %tok_k_77 = amdg.buffer_load_to_local %K[%tok_k_74] mask = %tok_k_76 other = %cst_1 into %tok_k_75 {contiguity = 8 : i32} : !tt.ptr<bf16>[tensor<64x128xi32, #linear>] tensor<64x128xbf16, #linear> -> <64x128xbf16, #shared, #smem, mutable>
+        %tok_k_65 = tt.splat %tok_k : i32 -> tensor<64x128xi32, #linear>
+        %tok_k_66 = tt.expand_dims %offs_n {axis = 1 : i32} : tensor<64xi32, #ttg.slice<{dim = 1, parent = #linear}>> -> tensor<64x1xi32, #linear>
+        %tok_k_67 = tt.splat %stride_kn : i32 -> tensor<64x1xi32, #linear>
+        %tok_k_68 = arith.muli %tok_k_66, %tok_k_67 : tensor<64x1xi32, #linear>
+        %tok_k_69 = tt.broadcast %tok_k_68 : tensor<64x1xi32, #linear> -> tensor<64x128xi32, #linear>
+        %tok_k_70 = tt.expand_dims %q_ptrs_22 {axis = 0 : i32} : tensor<128xi32, #ttg.slice<{dim = 0, parent = #linear}>> -> tensor<1x128xi32, #linear>
+        %tok_k_71 = tt.broadcast %tok_k_70 : tensor<1x128xi32, #linear> -> tensor<64x128xi32, #linear>
+        %tok_k_72 = arith.addi %tok_k_69, %tok_k_71 : tensor<64x128xi32, #linear>
+        %tok_k_73 = arith.addi %tok_k_72, %tok_k_65 : tensor<64x128xi32, #linear>
+        %tok_k_74 = tt.splat %q_off_12 : i32 -> tensor<64x128xi32, #linear>
+        %tok_k_75 = arith.addi %tok_k_74, %tok_k_73 : tensor<64x128xi32, #linear>
+        %tok_k_76 = ttg.memdesc_index %k_buf[%state_7] : !ttg.memdesc<2x64x128xbf16, #shared, #smem, mutable> -> !ttg.memdesc<64x128xbf16, #shared, #smem, mutable>
+        %tok_k_77 = tt.broadcast %mask_64 : tensor<64x1xi1, #linear> -> tensor<64x128xi1, #linear>
+        %tok_k_78 = amdg.buffer_load_to_local %K[%tok_k_75] mask = %tok_k_77 other = %cst_1 into %tok_k_76 {contiguity = 8 : i32} : !tt.ptr<bf16>[tensor<64x128xi32, #linear>] tensor<64x128xbf16, #linear> -> <64x128xbf16, #shared, #smem, mutable>
         %tok_v = arith.muli %start_n, %stride_vn : i32
-        %tok_v_78 = tt.splat %tok_v : i32 -> tensor<64x128xi32, #linear>
-        %tok_v_79 = tt.splat %stride_vn : i32 -> tensor<64x1xi32, #linear>
-        %tok_v_80 = arith.muli %tok_k_65, %tok_v_79 : tensor<64x1xi32, #linear>
-        %tok_v_81 = tt.broadcast %tok_v_80 : tensor<64x1xi32, #linear> -> tensor<64x128xi32, #linear>
-        %tok_v_82 = arith.addi %tok_v_81, %tok_k_70 : tensor<64x128xi32, #linear>
-        %tok_v_83 = arith.addi %tok_v_82, %tok_v_78 : tensor<64x128xi32, #linear>
-        %tok_v_84 = arith.addi %tok_k_73, %tok_v_83 : tensor<64x128xi32, #linear>
-        %tok_v_85 = ttg.memdesc_index %v_buf[%state_7] : !ttg.memdesc<2x64x128xbf16, #shared1, #smem, mutable> -> !ttg.memdesc<64x128xbf16, #shared1, #smem, mutable>
-        %tok_v_86 = amdg.buffer_load_to_local %V[%tok_v_84] mask = %tok_k_76 other = %cst_1 into %tok_v_85 {contiguity = 8 : i32} : !tt.ptr<bf16>[tensor<64x128xi32, #linear>] tensor<64x128xbf16, #linear> -> <64x128xbf16, #shared1, #smem, mutable>
-        %state_87 = ttg.async_commit_group tokens %tok_k_77, %tok_v_86
+        %tok_v_79 = tt.splat %tok_v : i32 -> tensor<64x128xi32, #linear>
+        %tok_v_80 = tt.splat %stride_vn : i32 -> tensor<64x1xi32, #linear>
+        %tok_v_81 = arith.muli %tok_k_66, %tok_v_80 : tensor<64x1xi32, #linear>
+        %tok_v_82 = tt.broadcast %tok_v_81 : tensor<64x1xi32, #linear> -> tensor<64x128xi32, #linear>
+        %tok_v_83 = arith.addi %tok_v_82, %tok_k_71 : tensor<64x128xi32, #linear>
+        %tok_v_84 = arith.addi %tok_v_83, %tok_v_79 : tensor<64x128xi32, #linear>
+        %tok_v_85 = arith.addi %tok_k_74, %tok_v_84 : tensor<64x128xi32, #linear>
+        %tok_v_86 = ttg.memdesc_index %v_buf[%state_7] : !ttg.memdesc<2x64x128xbf16, #shared1, #smem, mutable> -> !ttg.memdesc<64x128xbf16, #shared1, #smem, mutable>
+        %tok_v_87 = amdg.buffer_load_to_local %V[%tok_v_85] mask = %tok_k_77 other = %cst_1 into %tok_v_86 {contiguity = 8 : i32} : !tt.ptr<bf16>[tensor<64x128xi32, #linear>] tensor<64x128xbf16, #linear> -> <64x128xbf16, #shared1, #smem, mutable>
+        %state_88 = ttg.async_commit_group tokens %tok_k_78, %tok_v_87
       }
       %wait = ttg.async_wait {num = 0 : i32}
-      %state_59:3 = scf.if %state_57 -> (tensor<256x128xf32, #mma>, tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>, tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>) {
+      %state_60:3 = scf.if %state_58 -> (tensor<256x128xf32, #mma>, tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>, tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>) {
         %start_n = arith.muli %chunk_start, %state_8 : i32
         %kt_dot = ttg.memdesc_index %k_buf[%c0_i32] : !ttg.memdesc<2x64x128xbf16, #shared, #smem, mutable> -> !ttg.memdesc<64x128xbf16, #shared, #smem, mutable>
-        %kt_dot_61 = ttg.memdesc_trans %kt_dot {order = array<i32: 1, 0>} : !ttg.memdesc<64x128xbf16, #shared, #smem, mutable> -> !ttg.memdesc<128x64xbf16, #shared2, #smem, mutable>
-        %kt_dot_62 = ttg.local_load %kt_dot_61 token %wait {ttg.amdg.syncedViaAsyncWait = true} : !ttg.memdesc<128x64xbf16, #shared2, #smem, mutable> -> tensor<128x64xbf16, #ttg.dot_op<{opIdx = 1, parent = #mma, kWidth = 8}>>
+        %kt_dot_62 = ttg.memdesc_trans %kt_dot {order = array<i32: 1, 0>} : !ttg.memdesc<64x128xbf16, #shared, #smem, mutable> -> !ttg.memdesc<128x64xbf16, #shared2, #smem, mutable>
+        %kt_dot_63 = ttg.local_load %kt_dot_62 token %wait {ttg.amdg.syncedViaAsyncWait = true} : !ttg.memdesc<128x64xbf16, #shared2, #smem, mutable> -> tensor<128x64xbf16, #ttg.dot_op<{opIdx = 1, parent = #mma, kWidth = 8}>>
         %v_dot = ttg.memdesc_index %v_buf[%c0_i32] : !ttg.memdesc<2x64x128xbf16, #shared1, #smem, mutable> -> !ttg.memdesc<64x128xbf16, #shared1, #smem, mutable>
-        %v_dot_63 = ttg.local_load %v_dot token %wait {ttg.amdg.syncedViaAsyncWait = true} : !ttg.memdesc<64x128xbf16, #shared1, #smem, mutable> -> tensor<64x128xbf16, #ttg.dot_op<{opIdx = 1, parent = #mma, kWidth = 4}>>
-        %qk = tt.dot %q_39, %kt_dot_62, %cst_0 : tensor<256x128xbf16, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 8}>> * tensor<128x64xbf16, #ttg.dot_op<{opIdx = 1, parent = #mma, kWidth = 8}>> -> tensor<256x64xf32, #mma>
+        %v_dot_64 = ttg.local_load %v_dot token %wait {ttg.amdg.syncedViaAsyncWait = true} : !ttg.memdesc<64x128xbf16, #shared1, #smem, mutable> -> tensor<64x128xbf16, #ttg.dot_op<{opIdx = 1, parent = #mma, kWidth = 4}>>
+        %qk = tt.dot %q_40, %kt_dot_63, %cst_0 : tensor<256x128xbf16, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 8}>> * tensor<128x64xbf16, #ttg.dot_op<{opIdx = 1, parent = #mma, kWidth = 8}>> -> tensor<256x64xf32, #mma>
         %qk_sm = arith.mulf %qk, %cst_4 : tensor<256x64xf32, #mma>
         %kn = tt.splat %start_n : i32 -> tensor<64xi32, #ttg.slice<{dim = 0, parent = #mma}>>
-        %kn_64 = arith.addi %kn, %offs_n_18 : tensor<64xi32, #ttg.slice<{dim = 0, parent = #mma}>>
-        %qk_sm_65 = tt.expand_dims %kn_64 {axis = 0 : i32} : tensor<64xi32, #ttg.slice<{dim = 0, parent = #mma}>> -> tensor<1x64xi32, #mma>
-        %qk_sm_66 = arith.cmpi slt, %qk_sm_65, %state : tensor<1x64xi32, #mma>
-        %qk_sm_67 = tt.broadcast %qk_sm_66 : tensor<1x64xi1, #mma> -> tensor<256x64xi1, #mma>
-        %qk_sm_68 = arith.select %qk_sm_67, %qk_sm, %cst_5 : tensor<256x64xi1, #mma>, tensor<256x64xf32, #mma>
-        %m_ij = "tt.reduce"(%qk_sm_68) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
-        ^bb0(%m_ij_78: f32, %m_ij_79: f32):
-          %m_ij_80 = arith.maximumf %m_ij_78, %m_ij_79 : f32
-          tt.reduce.return %m_ij_80 : f32
+        %kn_65 = arith.addi %kn, %offs_n_19 : tensor<64xi32, #ttg.slice<{dim = 0, parent = #mma}>>
+        %qk_sm_66 = tt.expand_dims %kn_65 {axis = 0 : i32} : tensor<64xi32, #ttg.slice<{dim = 0, parent = #mma}>> -> tensor<1x64xi32, #mma>
+        %qk_sm_67 = arith.cmpi slt, %qk_sm_66, %state : tensor<1x64xi32, #mma>
+        %qk_sm_68 = tt.broadcast %qk_sm_67 : tensor<1x64xi1, #mma> -> tensor<256x64xi1, #mma>
+        %qk_sm_69 = arith.select %qk_sm_68, %qk_sm, %cst_5 : tensor<256x64xi1, #mma>, tensor<256x64xf32, #mma>
+        %m_ij = "tt.reduce"(%qk_sm_69) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+        ^bb0(%m_ij_79: f32, %m_ij_80: f32):
+          %m_ij_81 = arith.maximumf %m_ij_79, %m_ij_80 : f32
+          tt.reduce.return %m_ij_81 : f32
         }) : (tensor<256x64xf32, #mma>) -> tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>
-        %m_new = arith.maximumf %state.m_i_56, %m_ij : tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>
+        %m_new = arith.maximumf %state.m_i_57, %m_ij : tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>
         %p = tt.expand_dims %m_new {axis = 1 : i32} : tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>> -> tensor<256x1xf32, #mma>
-        %p_69 = tt.broadcast %p : tensor<256x1xf32, #mma> -> tensor<256x64xf32, #mma>
-        %p_70 = arith.subf %qk_sm_68, %p_69 : tensor<256x64xf32, #mma>
-        %p_71 = math.exp2 %p_70 : tensor<256x64xf32, #mma>
-        %alpha = arith.subf %state.m_i_56, %m_new : tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>
-        %alpha_72 = math.exp2 %alpha : tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>
-        %l_ij = "tt.reduce"(%p_71) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
-        ^bb0(%l_ij_78: f32, %l_ij_79: f32):
-          %l_ij_80 = arith.addf %l_ij_78, %l_ij_79 : f32
-          tt.reduce.return %l_ij_80 : f32
+        %p_70 = tt.broadcast %p : tensor<256x1xf32, #mma> -> tensor<256x64xf32, #mma>
+        %p_71 = arith.subf %qk_sm_69, %p_70 : tensor<256x64xf32, #mma>
+        %p_72 = math.exp2 %p_71 : tensor<256x64xf32, #mma>
+        %alpha = arith.subf %state.m_i_57, %m_new : tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>
+        %alpha_73 = math.exp2 %alpha : tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>
+        %l_ij = "tt.reduce"(%p_72) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+        ^bb0(%l_ij_79: f32, %l_ij_80: f32):
+          %l_ij_81 = arith.addf %l_ij_79, %l_ij_80 : f32
+          tt.reduce.return %l_ij_81 : f32
         }) : (tensor<256x64xf32, #mma>) -> tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>
-        %acc_73 = tt.expand_dims %alpha_72 {axis = 1 : i32} : tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>> -> tensor<256x1xf32, #mma>
-        %acc_74 = tt.broadcast %acc_73 : tensor<256x1xf32, #mma> -> tensor<256x128xf32, #mma>
-        %acc_75 = arith.mulf %state_55, %acc_74 : tensor<256x128xf32, #mma>
-        %l_i = arith.mulf %state.l_i, %alpha_72 : tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>
-        %l_i_76 = arith.addf %l_i, %l_ij : tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>
-        %p_cast = arith.truncf %p_71 : tensor<256x64xf32, #mma> to tensor<256x64xbf16, #mma>
+        %acc_74 = tt.expand_dims %alpha_73 {axis = 1 : i32} : tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>> -> tensor<256x1xf32, #mma>
+        %acc_75 = tt.broadcast %acc_74 : tensor<256x1xf32, #mma> -> tensor<256x128xf32, #mma>
+        %acc_76 = arith.mulf %state_56, %acc_75 : tensor<256x128xf32, #mma>
+        %l_i = arith.mulf %state.l_i, %alpha_73 : tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>
+        %l_i_77 = arith.addf %l_i, %l_ij : tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>
+        %p_cast = arith.truncf %p_72 : tensor<256x64xf32, #mma> to tensor<256x64xbf16, #mma>
         %p_dot = ttg.convert_layout %p_cast : tensor<256x64xbf16, #mma> -> tensor<256x64xbf16, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 4}>>
-        %state_77 = tt.dot %p_dot, %v_dot_63, %acc_75 : tensor<256x64xbf16, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 4}>> * tensor<64x128xbf16, #ttg.dot_op<{opIdx = 1, parent = #mma, kWidth = 4}>> -> tensor<256x128xf32, #mma>
-        scf.yield %state_77, %l_i_76, %m_new : tensor<256x128xf32, #mma>, tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>, tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>
+        %state_78 = tt.dot %p_dot, %v_dot_64, %acc_76 : tensor<256x64xbf16, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 4}>> * tensor<64x128xbf16, #ttg.dot_op<{opIdx = 1, parent = #mma, kWidth = 4}>> -> tensor<256x128xf32, #mma>
+        scf.yield %state_78, %l_i_77, %m_new : tensor<256x128xf32, #mma>, tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>, tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>
       } else {
-        scf.yield %state_55, %state.l_i, %state.m_i_56 : tensor<256x128xf32, #mma>, tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>, tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>
+        scf.yield %state_56, %state.l_i, %state.m_i_57 : tensor<256x128xf32, #mma>, tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>, tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>
       }
-      %state_60:3 = scf.if %state_58 -> (tensor<256x128xf32, #mma>, tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>, tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>) {
+      %state_61:3 = scf.if %state_59 -> (tensor<256x128xf32, #mma>, tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>, tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>) {
         %start_n = arith.muli %block_offset, %state_8 : i32
         %kt_dot = ttg.memdesc_index %k_buf[%state_7] : !ttg.memdesc<2x64x128xbf16, #shared, #smem, mutable> -> !ttg.memdesc<64x128xbf16, #shared, #smem, mutable>
-        %kt_dot_61 = ttg.memdesc_trans %kt_dot {order = array<i32: 1, 0>} : !ttg.memdesc<64x128xbf16, #shared, #smem, mutable> -> !ttg.memdesc<128x64xbf16, #shared2, #smem, mutable>
-        %kt_dot_62 = ttg.local_load %kt_dot_61 token %wait {ttg.amdg.syncedViaAsyncWait = true} : !ttg.memdesc<128x64xbf16, #shared2, #smem, mutable> -> tensor<128x64xbf16, #ttg.dot_op<{opIdx = 1, parent = #mma, kWidth = 8}>>
+        %kt_dot_62 = ttg.memdesc_trans %kt_dot {order = array<i32: 1, 0>} : !ttg.memdesc<64x128xbf16, #shared, #smem, mutable> -> !ttg.memdesc<128x64xbf16, #shared2, #smem, mutable>
+        %kt_dot_63 = ttg.local_load %kt_dot_62 token %wait {ttg.amdg.syncedViaAsyncWait = true} : !ttg.memdesc<128x64xbf16, #shared2, #smem, mutable> -> tensor<128x64xbf16, #ttg.dot_op<{opIdx = 1, parent = #mma, kWidth = 8}>>
         %v_dot = ttg.memdesc_index %v_buf[%state_7] : !ttg.memdesc<2x64x128xbf16, #shared1, #smem, mutable> -> !ttg.memdesc<64x128xbf16, #shared1, #smem, mutable>
-        %v_dot_63 = ttg.local_load %v_dot token %wait {ttg.amdg.syncedViaAsyncWait = true} : !ttg.memdesc<64x128xbf16, #shared1, #smem, mutable> -> tensor<64x128xbf16, #ttg.dot_op<{opIdx = 1, parent = #mma, kWidth = 4}>>
-        %qk = tt.dot %q_39, %kt_dot_62, %cst_0 : tensor<256x128xbf16, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 8}>> * tensor<128x64xbf16, #ttg.dot_op<{opIdx = 1, parent = #mma, kWidth = 8}>> -> tensor<256x64xf32, #mma>
+        %v_dot_64 = ttg.local_load %v_dot token %wait {ttg.amdg.syncedViaAsyncWait = true} : !ttg.memdesc<64x128xbf16, #shared1, #smem, mutable> -> tensor<64x128xbf16, #ttg.dot_op<{opIdx = 1, parent = #mma, kWidth = 4}>>
+        %qk = tt.dot %q_40, %kt_dot_63, %cst_0 : tensor<256x128xbf16, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 8}>> * tensor<128x64xbf16, #ttg.dot_op<{opIdx = 1, parent = #mma, kWidth = 8}>> -> tensor<256x64xf32, #mma>
         %qk_sm = arith.mulf %qk, %cst_4 : tensor<256x64xf32, #mma>
         %kn = tt.splat %start_n : i32 -> tensor<64xi32, #ttg.slice<{dim = 0, parent = #mma}>>
-        %kn_64 = arith.addi %kn, %offs_n_18 : tensor<64xi32, #ttg.slice<{dim = 0, parent = #mma}>>
-        %qk_sm_65 = tt.expand_dims %kn_64 {axis = 0 : i32} : tensor<64xi32, #ttg.slice<{dim = 0, parent = #mma}>> -> tensor<1x64xi32, #mma>
-        %qk_sm_66 = arith.cmpi slt, %qk_sm_65, %state : tensor<1x64xi32, #mma>
-        %qk_sm_67 = tt.broadcast %qk_sm_66 : tensor<1x64xi1, #mma> -> tensor<256x64xi1, #mma>
-        %qk_sm_68 = arith.select %qk_sm_67, %qk_sm, %cst_5 : tensor<256x64xi1, #mma>, tensor<256x64xf32, #mma>
-        %m_ij = "tt.reduce"(%qk_sm_68) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
-        ^bb0(%m_ij_78: f32, %m_ij_79: f32):
-          %m_ij_80 = arith.maximumf %m_ij_78, %m_ij_79 : f32
-          tt.reduce.return %m_ij_80 : f32
+        %kn_65 = arith.addi %kn, %offs_n_19 : tensor<64xi32, #ttg.slice<{dim = 0, parent = #mma}>>
+        %qk_sm_66 = tt.expand_dims %kn_65 {axis = 0 : i32} : tensor<64xi32, #ttg.slice<{dim = 0, parent = #mma}>> -> tensor<1x64xi32, #mma>
+        %qk_sm_67 = arith.cmpi slt, %qk_sm_66, %state : tensor<1x64xi32, #mma>
+        %qk_sm_68 = tt.broadcast %qk_sm_67 : tensor<1x64xi1, #mma> -> tensor<256x64xi1, #mma>
+        %qk_sm_69 = arith.select %qk_sm_68, %qk_sm, %cst_5 : tensor<256x64xi1, #mma>, tensor<256x64xf32, #mma>
+        %m_ij = "tt.reduce"(%qk_sm_69) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+        ^bb0(%m_ij_79: f32, %m_ij_80: f32):
+          %m_ij_81 = arith.maximumf %m_ij_79, %m_ij_80 : f32
+          tt.reduce.return %m_ij_81 : f32
         }) : (tensor<256x64xf32, #mma>) -> tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>
-        %m_new = arith.maximumf %state_59#2, %m_ij : tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>
+        %m_new = arith.maximumf %state_60#2, %m_ij : tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>
         %p = tt.expand_dims %m_new {axis = 1 : i32} : tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>> -> tensor<256x1xf32, #mma>
-        %p_69 = tt.broadcast %p : tensor<256x1xf32, #mma> -> tensor<256x64xf32, #mma>
-        %p_70 = arith.subf %qk_sm_68, %p_69 : tensor<256x64xf32, #mma>
-        %p_71 = math.exp2 %p_70 : tensor<256x64xf32, #mma>
-        %alpha = arith.subf %state_59#2, %m_new : tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>
-        %alpha_72 = math.exp2 %alpha : tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>
-        %l_ij = "tt.reduce"(%p_71) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
-        ^bb0(%l_ij_78: f32, %l_ij_79: f32):
-          %l_ij_80 = arith.addf %l_ij_78, %l_ij_79 : f32
-          tt.reduce.return %l_ij_80 : f32
+        %p_70 = tt.broadcast %p : tensor<256x1xf32, #mma> -> tensor<256x64xf32, #mma>
+        %p_71 = arith.subf %qk_sm_69, %p_70 : tensor<256x64xf32, #mma>
+        %p_72 = math.exp2 %p_71 : tensor<256x64xf32, #mma>
+        %alpha = arith.subf %state_60#2, %m_new : tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>
+        %alpha_73 = math.exp2 %alpha : tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>
+        %l_ij = "tt.reduce"(%p_72) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+        ^bb0(%l_ij_79: f32, %l_ij_80: f32):
+          %l_ij_81 = arith.addf %l_ij_79, %l_ij_80 : f32
+          tt.reduce.return %l_ij_81 : f32
         }) : (tensor<256x64xf32, #mma>) -> tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>
-        %acc_73 = tt.expand_dims %alpha_72 {axis = 1 : i32} : tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>> -> tensor<256x1xf32, #mma>
-        %acc_74 = tt.broadcast %acc_73 : tensor<256x1xf32, #mma> -> tensor<256x128xf32, #mma>
-        %acc_75 = arith.mulf %state_59#0, %acc_74 : tensor<256x128xf32, #mma>
-        %l_i = arith.mulf %state_59#1, %alpha_72 : tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>
-        %l_i_76 = arith.addf %l_i, %l_ij : tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>
-        %p_cast = arith.truncf %p_71 : tensor<256x64xf32, #mma> to tensor<256x64xbf16, #mma>
+        %acc_74 = tt.expand_dims %alpha_73 {axis = 1 : i32} : tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>> -> tensor<256x1xf32, #mma>
+        %acc_75 = tt.broadcast %acc_74 : tensor<256x1xf32, #mma> -> tensor<256x128xf32, #mma>
+        %acc_76 = arith.mulf %state_60#0, %acc_75 : tensor<256x128xf32, #mma>
+        %l_i = arith.mulf %state_60#1, %alpha_73 : tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>
+        %l_i_77 = arith.addf %l_i, %l_ij : tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>
+        %p_cast = arith.truncf %p_72 : tensor<256x64xf32, #mma> to tensor<256x64xbf16, #mma>
         %p_dot = ttg.convert_layout %p_cast : tensor<256x64xbf16, #mma> -> tensor<256x64xbf16, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 4}>>
-        %state_77 = tt.dot %p_dot, %v_dot_63, %acc_75 : tensor<256x64xbf16, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 4}>> * tensor<64x128xbf16, #ttg.dot_op<{opIdx = 1, parent = #mma, kWidth = 4}>> -> tensor<256x128xf32, #mma>
-        scf.yield %state_77, %l_i_76, %m_new : tensor<256x128xf32, #mma>, tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>, tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>
+        %state_78 = tt.dot %p_dot, %v_dot_64, %acc_76 : tensor<256x64xbf16, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 4}>> * tensor<64x128xbf16, #ttg.dot_op<{opIdx = 1, parent = #mma, kWidth = 4}>> -> tensor<256x128xf32, #mma>
+        scf.yield %state_78, %l_i_77, %m_new : tensor<256x128xf32, #mma>, tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>, tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>
       } else {
-        scf.yield %state_59#0, %state_59#1, %state_59#2 : tensor<256x128xf32, #mma>, tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>, tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>
+        scf.yield %state_60#0, %state_60#1, %state_60#2 : tensor<256x128xf32, #mma>, tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>, tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>
       }
       ttg.barrier all
-      scf.yield %state_60#0, %state_60#1, %state_60#2 : tensor<256x128xf32, #mma>, tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>, tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>
+      scf.yield %state_61#0, %state_61#1, %state_61#2 : tensor<256x128xf32, #mma>, tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>, tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>
     } {tt.loop_unroll_factor = 1 : i32, tt.num_stages = 1 : i32}
-    %l_recip = tt.extern_elementwise %cst_2, %state.m_i_41#1 {libname = "", libpath = "", pure = true, symbol = "__triton_hip_fast_fdividef"} : (tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>, tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>) -> tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>
+    %l_recip = tt.extern_elementwise %cst_2, %state.m_i_42#1 {libname = "", libpath = "", pure = true, symbol = "__triton_hip_fast_fdividef"} : (tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>, tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>) -> tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>>
     %acc = tt.expand_dims %l_recip {axis = 1 : i32} : tensor<256xf32, #ttg.slice<{dim = 1, parent = #mma}>> -> tensor<256x1xf32, #mma>
-    %acc_42 = tt.broadcast %acc : tensor<256x1xf32, #mma> -> tensor<256x128xf32, #mma>
-    %acc_43 = arith.mulf %state.m_i_41#0, %acc_42 : tensor<256x128xf32, #mma>
-    %o_ptrs = arith.muli %offs_m, %stride_om : i32
-    %o_ptrs_44 = tt.expand_dims %local_m_13 {axis = 1 : i32} : tensor<256xi32, #ttg.slice<{dim = 1, parent = #linear1}>> -> tensor<256x1xi32, #linear1>
-    %o_ptrs_45 = tt.splat %stride_om : i32 -> tensor<256x1xi32, #linear1>
-    %o_ptrs_46 = arith.muli %o_ptrs_44, %o_ptrs_45 : tensor<256x1xi32, #linear1>
-    %o_ptrs_47 = arith.addi %o_ptrs, %q_off_12 : i32
-    %o_ptrs_48 = tt.broadcast %o_ptrs_46 : tensor<256x1xi32, #linear1> -> tensor<256x128xi32, #linear1>
-    %o_ptrs_49 = tt.expand_dims %q_ptrs_23 {axis = 0 : i32} : tensor<128xi32, #ttg.slice<{dim = 0, parent = #linear1}>> -> tensor<1x128xi32, #linear1>
-    %o_ptrs_50 = tt.broadcast %o_ptrs_49 : tensor<1x128xi32, #linear1> -> tensor<256x128xi32, #linear1>
-    %o_ptrs_51 = arith.addi %o_ptrs_48, %o_ptrs_50 : tensor<256x128xi32, #linear1>
-    %o_ptrs_52 = tt.splat %o_ptrs_47 : i32 -> tensor<256x128xi32, #linear1>
-    %o_ptrs_53 = arith.addi %o_ptrs_52, %o_ptrs_51 : tensor<256x128xi32, #linear1>
-    %out = arith.truncf %acc_43 : tensor<256x128xf32, #mma> to tensor<256x128xbf16, #mma>
-    %out_54 = ttg.convert_layout %out : tensor<256x128xbf16, #mma> -> tensor<256x128xbf16, #linear1>
-    amdg.buffer_store %out_54, %Out[%o_ptrs_53], %q_36 {contiguity = 8 : i32} : !tt.ptr<bf16> -> tensor<256x128xbf16, #linear1>
+    %acc_43 = tt.broadcast %acc : tensor<256x1xf32, #mma> -> tensor<256x128xf32, #mma>
+    %acc_44 = arith.mulf %state.m_i_42#0, %acc_43 : tensor<256x128xf32, #mma>
+    %o_ptrs = arith.muli %offs_m_14, %stride_om : i32
+    %o_ptrs_45 = tt.expand_dims %local_m_13 {axis = 1 : i32} : tensor<256xi32, #ttg.slice<{dim = 1, parent = #linear1}>> -> tensor<256x1xi32, #linear1>
+    %o_ptrs_46 = tt.splat %stride_om : i32 -> tensor<256x1xi32, #linear1>
+    %o_ptrs_47 = arith.muli %o_ptrs_45, %o_ptrs_46 : tensor<256x1xi32, #linear1>
+    %o_ptrs_48 = arith.addi %o_ptrs, %q_off_12 : i32
+    %o_ptrs_49 = tt.broadcast %o_ptrs_47 : tensor<256x1xi32, #linear1> -> tensor<256x128xi32, #linear1>
+    %o_ptrs_50 = tt.expand_dims %q_ptrs_24 {axis = 0 : i32} : tensor<128xi32, #ttg.slice<{dim = 0, parent = #linear1}>> -> tensor<1x128xi32, #linear1>
+    %o_ptrs_51 = tt.broadcast %o_ptrs_50 : tensor<1x128xi32, #linear1> -> tensor<256x128xi32, #linear1>
+    %o_ptrs_52 = arith.addi %o_ptrs_49, %o_ptrs_51 : tensor<256x128xi32, #linear1>
+    %o_ptrs_53 = tt.splat %o_ptrs_48 : i32 -> tensor<256x128xi32, #linear1>
+    %o_ptrs_54 = arith.addi %o_ptrs_53, %o_ptrs_52 : tensor<256x128xi32, #linear1>
+    %out = arith.truncf %acc_44 : tensor<256x128xf32, #mma> to tensor<256x128xbf16, #mma>
+    %out_55 = ttg.convert_layout %out : tensor<256x128xbf16, #mma> -> tensor<256x128xbf16, #linear1>
+    amdg.buffer_store %out_55, %Out[%o_ptrs_54], %q_37 {contiguity = 8 : i32} : !tt.ptr<bf16> -> tensor<256x128xbf16, #linear1>
     tt.return
   }
 }
