@@ -66,12 +66,14 @@ def _launch():
     }
 
 
-def _write_case(root, source, target, case, llir=_LLIR, launch="dflt", spec=None):
-    cdir = os.path.join(root, "gfx950", source, target, case)
+def _write_case(
+    root, source, target, case, llir=_LLIR, launch="dflt", spec=None, arch="gfx950"
+):
+    cdir = os.path.join(root, arch, source, target, case)
     os.makedirs(cdir, exist_ok=True)
     with open(os.path.join(cdir, "kernel.llir"), "w") as f:
         f.write(llir)
-    compile_info = {}
+    compile_info = {"arch": arch}
     if launch == "dflt":
         compile_info["launch"] = _launch()
     elif launch is not None:
@@ -210,6 +212,14 @@ class KernelRecordTest(unittest.TestCase):
 
 
 class CollectTest(unittest.TestCase):
+    def test_gfx1250_thread_count(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _write_case(tmp, "tlx_ops", "mm", "m1", arch="gfx1250")
+            doc = collect(tmp, "gfx1250")
+        kernel = doc["cases"][0]["kernels"][0]
+        self.assertEqual(kernel["status"], "ok")
+        self.assertEqual(kernel["threads"], 128)
+
     def _tree(self, tmp: str) -> str:
         _write_case(tmp, "tlx_ops", "mm", "m1", spec=_MM_SPEC)
         _write_case(tmp, "tlx_ops", "mm", "m1__k1", spec=_MM_SPEC)

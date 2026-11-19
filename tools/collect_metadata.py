@@ -205,7 +205,7 @@ def _arg_nbytes(rec: dict, sig_entry) -> int | None:
     return bits // 8
 
 
-def _launch_details(launch: dict, sig, strip_scratch) -> dict:
+def _launch_details(launch: dict, sig, strip_scratch, wavefront: int) -> dict:
     """Grid/block/arg summaries plus input/output bytes for a valid launch."""
     user_sig, _n_scratch = strip_scratch(sig, launch)
     block = launch.get("block") or {}
@@ -228,7 +228,7 @@ def _launch_details(launch: dict, sig, strip_scratch) -> dict:
     return {
         "grid": grid,
         "ctas": ctas,
-        "threads": int(block["num_warps"]) * WAVEFRONT,
+        "threads": int(block["num_warps"]) * wavefront,
         "shared": block.get("shared"),
         "args": args,
         "input_bytes": in_bytes if exact else None,
@@ -265,7 +265,8 @@ def kernel_record(cdir: str, parse, strip_scratch, validate) -> dict:
         rec["status"] = "missing-launch"
         return rec
     try:
-        details = _launch_details(launch, sig, strip_scratch)
+        wavefront = 32 if compile_info.get("arch") == "gfx1250" else WAVEFRONT
+        details = _launch_details(launch, sig, strip_scratch, wavefront)
     except (KeyError, TypeError, ValueError) as e:
         rec["status"] = "bad-launch"
         rec["problems"] = [f"bad-launch: {e!r}"]
