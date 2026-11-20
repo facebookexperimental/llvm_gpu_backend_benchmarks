@@ -1,0 +1,46 @@
+module {
+  tt.func public @_attn_bwd_preprocess(%O: !tt.ptr<f16> {tt.divisibility = 16 : i32}, %DO: !tt.ptr<f16> {tt.divisibility = 16 : i32}, %Delta: !tt.ptr<f32> {tt.divisibility = 16 : i32}, %DQ_ACCUM: !tt.ptr<f32> {tt.divisibility = 16 : i32}, %N_CTX: i32 {tt.divisibility = 16 : i32}) attributes {noinline = false} {
+    %cst = arith.constant dense<0.000000e+00> : tensor<128x128xf32>
+    %offs = arith.constant dense<128> : tensor<128x1xi32>
+    %c128_i32 = arith.constant 128 : i32
+    %off_m = tt.get_program_id x : i32
+    %off_m_0 = arith.muli %off_m, %c128_i32 : i32
+    %off_m_1 = tt.make_range {end = 128 : i32, start = 0 : i32} : tensor<128xi32>
+    %off_m_2 = tt.splat %off_m_0 : i32 -> tensor<128xi32>
+    %off_m_3 = arith.addi %off_m_2, %off_m_1 : tensor<128xi32>
+    %off_hz = tt.get_program_id y : i32
+    %offs_4 = arith.muli %off_hz, %c128_i32 : i32
+    %offs_5 = arith.muli %offs_4, %N_CTX : i32
+    %offs_6 = tt.expand_dims %off_m_3 {axis = 1 : i32} : tensor<128xi32> -> tensor<128x1xi32>
+    %offs_7 = arith.muli %offs_6, %offs : tensor<128x1xi32>
+    %offs_8 = tt.splat %offs_5 : i32 -> tensor<128x1xi32>
+    %offs_9 = arith.addi %offs_8, %offs_7 : tensor<128x1xi32>
+    %offs_10 = tt.expand_dims %off_m_1 {axis = 0 : i32} : tensor<128xi32> -> tensor<1x128xi32>
+    %offs_11 = tt.broadcast %offs_9 : tensor<128x1xi32> -> tensor<128x128xi32>
+    %offs_12 = tt.broadcast %offs_10 : tensor<1x128xi32> -> tensor<128x128xi32>
+    %offs_13 = arith.addi %offs_11, %offs_12 : tensor<128x128xi32>
+    %o = tt.splat %O : !tt.ptr<f16> -> tensor<128x128x!tt.ptr<f16>>
+    %o_14 = tt.addptr %o, %offs_13 : tensor<128x128x!tt.ptr<f16>>, tensor<128x128xi32>
+    %o_15 = tt.load %o_14 : tensor<128x128x!tt.ptr<f16>>
+    %do = tt.splat %DO : !tt.ptr<f16> -> tensor<128x128x!tt.ptr<f16>>
+    %do_16 = tt.addptr %do, %offs_13 : tensor<128x128x!tt.ptr<f16>>, tensor<128x128xi32>
+    %do_17 = tt.load %do_16 : tensor<128x128x!tt.ptr<f16>>
+    %do_18 = arith.extf %do_17 : tensor<128x128xf16> to tensor<128x128xf32>
+    %delta = arith.extf %o_15 : tensor<128x128xf16> to tensor<128x128xf32>
+    %delta_19 = arith.mulf %delta, %do_18 : tensor<128x128xf32>
+    %delta_20 = "tt.reduce"(%delta_19) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%delta_21: f32, %delta_22: f32):
+      %delta_23 = arith.addf %delta_21, %delta_22 : f32
+      tt.reduce.return %delta_23 : f32
+    }) : (tensor<128x128xf32>) -> tensor<128xf32>
+    %0 = arith.muli %off_hz, %N_CTX : i32
+    %1 = tt.addptr %Delta, %0 : !tt.ptr<f32>, i32
+    %2 = tt.splat %1 : !tt.ptr<f32> -> tensor<128x!tt.ptr<f32>>
+    %3 = tt.addptr %2, %off_m_3 : tensor<128x!tt.ptr<f32>>, tensor<128xi32>
+    tt.store %3, %delta_20 : tensor<128x!tt.ptr<f32>>
+    %4 = tt.splat %DQ_ACCUM : !tt.ptr<f32> -> tensor<128x128x!tt.ptr<f32>>
+    %5 = tt.addptr %4, %offs_13 : tensor<128x128x!tt.ptr<f32>>, tensor<128x128xi32>
+    tt.store %5, %cst : tensor<128x128x!tt.ptr<f32>>
+    tt.return
+  }
+}

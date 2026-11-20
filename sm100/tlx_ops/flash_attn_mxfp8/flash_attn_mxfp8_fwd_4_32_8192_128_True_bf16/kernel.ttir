@@ -1,0 +1,73 @@
+module {
+  tt.func public @_mxfp8_32x32_qdata_dual_scale_kernel(%input_ptr: !tt.ptr<bf16> {tt.divisibility = 16 : i32}, %data_ptr: !tt.ptr<f8E4M3FN> {tt.divisibility = 16 : i32}, %normal_scale_ptr: !tt.ptr<i8> {tt.divisibility = 16 : i32}) attributes {noinline = false} {
+    %cst = arith.constant dense<0.00223214296> : tensor<1x4xf32>
+    %normal_offset = arith.constant dense<4> : tensor<32x1xi32>
+    %normal_offset_0 = arith.constant dense<16> : tensor<32x1xi32>
+    %cst_1 = arith.constant dense<32> : tensor<32x1xi32>
+    %cst_2 = arith.constant dense<128> : tensor<32x1xi32>
+    %c32_i32 = arith.constant 32 : i32
+    %pid_m = tt.get_program_id x : i32
+    %offs_m = arith.muli %pid_m, %c32_i32 : i32
+    %offs_m_3 = tt.make_range {end = 32 : i32, start = 0 : i32} : tensor<32xi32>
+    %offs_m_4 = tt.splat %offs_m : i32 -> tensor<32xi32>
+    %offs_m_5 = arith.addi %offs_m_4, %offs_m_3 : tensor<32xi32>
+    %offs_n = tt.make_range {end = 128 : i32, start = 0 : i32} : tensor<128xi32>
+    %input_block = tt.expand_dims %offs_m_5 {axis = 1 : i32} : tensor<32xi32> -> tensor<32x1xi32>
+    %input_block_6 = arith.muli %input_block, %cst_2 : tensor<32x1xi32>
+    %input_block_7 = tt.splat %input_ptr : !tt.ptr<bf16> -> tensor<32x1x!tt.ptr<bf16>>
+    %input_block_8 = tt.addptr %input_block_7, %input_block_6 : tensor<32x1x!tt.ptr<bf16>>, tensor<32x1xi32>
+    %input_block_9 = tt.expand_dims %offs_n {axis = 0 : i32} : tensor<128xi32> -> tensor<1x128xi32>
+    %input_block_10 = tt.broadcast %input_block_8 : tensor<32x1x!tt.ptr<bf16>> -> tensor<32x128x!tt.ptr<bf16>>
+    %input_block_11 = tt.broadcast %input_block_9 : tensor<1x128xi32> -> tensor<32x128xi32>
+    %input_block_12 = tt.addptr %input_block_10, %input_block_11 : tensor<32x128x!tt.ptr<bf16>>, tensor<32x128xi32>
+    %input_block_13 = tt.load %input_block_12 : tensor<32x128x!tt.ptr<bf16>>
+    %input_block_14 = arith.extf %input_block_13 : tensor<32x128xbf16> to tensor<32x128xf32>
+    %input_32x32 = tt.reshape %input_block_14 : tensor<32x128xf32> -> tensor<1x32x4x32xf32>
+    %partial_amax = math.absf %input_32x32 : tensor<1x32x4x32xf32>
+    %partial_amax_15 = "tt.reduce"(%partial_amax) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%partial_amax_36: f32, %partial_amax_37: f32):
+      %partial_amax_38 = arith.maxnumf %partial_amax_36, %partial_amax_37 : f32
+      tt.reduce.return %partial_amax_38 : f32
+    }) : (tensor<1x32x4x32xf32>) -> tensor<1x4x32xf32>
+    %block_amax = "tt.reduce"(%partial_amax_15) <{axis = 2 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%block_amax_36: f32, %block_amax_37: f32):
+      %block_amax_38 = arith.maxnumf %block_amax_36, %block_amax_37 : f32
+      tt.reduce.return %block_amax_38 : f32
+    }) : (tensor<1x4x32xf32>) -> tensor<1x4xf32>
+    %0:2 = tt.elementwise_inline_asm "\0A        {\0A            .reg .f32 fae_scale, fae_zero;\0A            .reg .b16 fae_packed;\0A            .reg .u32 fae_exp, fae_inv_exp, fae_inv_bits;\0A            mul.f32 fae_scale, $2, $3;\0A            mov.b32 fae_zero, 0;\0A            cvt.rp.satfinite.ue8m0x2.f32 fae_packed, fae_zero, fae_scale;\0A            cvt.u32.u16 fae_exp, fae_packed;\0A            and.b32 fae_exp, fae_exp, 0xFF;\0A            mov.u32 $0, fae_exp;\0A            sub.u32 fae_inv_exp, 254, fae_exp;\0A            shl.b32 fae_inv_bits, fae_inv_exp, 23;\0A            mov.b32 $1, fae_inv_bits;\0A        }\0A        " {constraints = "=r,=f,f,f", packed_element = 1 : i32, pure = true} %block_amax, %cst : tensor<1x4xf32>, tensor<1x4xf32> -> tensor<1x4xi32>, tensor<1x4xf32>
+    %block_scale = arith.trunci %0#0 : tensor<1x4xi32> to tensor<1x4xi8>
+    %data = tt.expand_dims %0#1 {axis = 1 : i32} : tensor<1x4xf32> -> tensor<1x1x4xf32>
+    %data_16 = tt.expand_dims %data {axis = 3 : i32} : tensor<1x1x4xf32> -> tensor<1x1x4x1xf32>
+    %data_17 = tt.broadcast %data_16 : tensor<1x1x4x1xf32> -> tensor<1x32x4x32xf32>
+    %data_18 = arith.mulf %input_32x32, %data_17 : tensor<1x32x4x32xf32>
+    %data_19 = tt.fp_to_fp %data_18, rounding = rtne : tensor<1x32x4x32xf32> -> tensor<1x32x4x32xf8E4M3FN>
+    %data_20 = tt.reshape %data_19 : tensor<1x32x4x32xf8E4M3FN> -> tensor<32x128xf8E4M3FN>
+    %1 = tt.splat %data_ptr : !tt.ptr<f8E4M3FN> -> tensor<32x1x!tt.ptr<f8E4M3FN>>
+    %2 = tt.addptr %1, %input_block_6 : tensor<32x1x!tt.ptr<f8E4M3FN>>, tensor<32x1xi32>
+    %3 = tt.broadcast %2 : tensor<32x1x!tt.ptr<f8E4M3FN>> -> tensor<32x128x!tt.ptr<f8E4M3FN>>
+    %4 = tt.addptr %3, %input_block_11 : tensor<32x128x!tt.ptr<f8E4M3FN>>, tensor<32x128xi32>
+    tt.store %4, %data_20 : tensor<32x128x!tt.ptr<f8E4M3FN>>
+    %col_normal = tt.make_range {end = 4 : i32, start = 0 : i32} : tensor<4xi32>
+    %col_normal_21 = tt.expand_dims %col_normal {axis = 0 : i32} : tensor<4xi32> -> tensor<1x4xi32>
+    %row_in_128 = arith.remsi %input_block, %cst_2 : tensor<32x1xi32>
+    %normal_offset_22 = arith.divsi %input_block, %cst_2 : tensor<32x1xi32>
+    %normal_offset_23 = arith.muli %normal_offset_22, %cst_1 : tensor<32x1xi32>
+    %normal_offset_24 = arith.remsi %row_in_128, %cst_1 : tensor<32x1xi32>
+    %normal_offset_25 = arith.addi %normal_offset_23, %normal_offset_24 : tensor<32x1xi32>
+    %normal_offset_26 = arith.muli %normal_offset_25, %normal_offset_0 : tensor<32x1xi32>
+    %normal_offset_27 = arith.divsi %row_in_128, %cst_1 : tensor<32x1xi32>
+    %normal_offset_28 = arith.muli %normal_offset_27, %normal_offset : tensor<32x1xi32>
+    %normal_offset_29 = tt.broadcast %normal_offset_28 : tensor<32x1xi32> -> tensor<32x4xi32>
+    %normal_offset_30 = tt.broadcast %col_normal_21 : tensor<1x4xi32> -> tensor<32x4xi32>
+    %normal_offset_31 = arith.addi %normal_offset_29, %normal_offset_30 : tensor<32x4xi32>
+    %normal_offset_32 = tt.broadcast %normal_offset_26 : tensor<32x1xi32> -> tensor<32x4xi32>
+    %normal_offset_33 = arith.addi %normal_offset_32, %normal_offset_31 : tensor<32x4xi32>
+    %normal_scale = tt.expand_dims %block_scale {axis = 1 : i32} : tensor<1x4xi8> -> tensor<1x1x4xi8>
+    %normal_scale_34 = tt.broadcast %normal_scale : tensor<1x1x4xi8> -> tensor<1x32x4xi8>
+    %normal_scale_35 = tt.reshape %normal_scale_34 : tensor<1x32x4xi8> -> tensor<32x4xi8>
+    %5 = tt.splat %normal_scale_ptr : !tt.ptr<i8> -> tensor<32x4x!tt.ptr<i8>>
+    %6 = tt.addptr %5, %normal_offset_33 : tensor<32x4x!tt.ptr<i8>>, tensor<32x4xi32>
+    tt.store %6, %normal_scale_35 : tensor<32x4x!tt.ptr<i8>>
+    tt.return
+  }
+}
