@@ -1,0 +1,48 @@
+module {
+  tt.func public @_reduce_k_kernel(%workspace_ptr: !tt.ptr<f32> {tt.divisibility = 16 : i32}, %out_ptr: !tt.ptr<bf16> {tt.divisibility = 16 : i32}, %M: i32 {tt.divisibility = 16 : i32}, %N: i32 {tt.divisibility = 16 : i32}, %ROWS_PER_SPLIT: i32 {tt.divisibility = 16 : i32}) attributes {noinline = false} {
+    %c1_i32 = arith.constant 1 : i32
+    %c8_i32 = arith.constant 8 : i32
+    %c0_i32 = arith.constant 0 : i32
+    %cst = arith.constant dense<0.000000e+00> : tensor<32x32xf32>
+    %c32_i32 = arith.constant 32 : i32
+    %pid_m = tt.get_program_id x : i32
+    %pid_n = tt.get_program_id y : i32
+    %offs_m = arith.muli %pid_m, %c32_i32 : i32
+    %offs_m_0 = tt.make_range {end = 32 : i32, start = 0 : i32} : tensor<32xi32>
+    %offs_m_1 = tt.splat %offs_m : i32 -> tensor<32xi32>
+    %offs_m_2 = arith.addi %offs_m_1, %offs_m_0 : tensor<32xi32>
+    %offs_n = arith.muli %pid_n, %c32_i32 : i32
+    %offs_n_3 = tt.splat %offs_n : i32 -> tensor<32xi32>
+    %offs_n_4 = arith.addi %offs_n_3, %offs_m_0 : tensor<32xi32>
+    %mask = tt.expand_dims %offs_m_2 {axis = 1 : i32} : tensor<32xi32> -> tensor<32x1xi32>
+    %mask_5 = tt.splat %M : i32 -> tensor<32x1xi32>
+    %mask_6 = arith.cmpi slt, %mask, %mask_5 : tensor<32x1xi32>
+    %mask_7 = tt.expand_dims %offs_n_4 {axis = 0 : i32} : tensor<32xi32> -> tensor<1x32xi32>
+    %mask_8 = tt.splat %N : i32 -> tensor<1x32xi32>
+    %mask_9 = arith.cmpi slt, %mask_7, %mask_8 : tensor<1x32xi32>
+    %mask_10 = tt.broadcast %mask_6 : tensor<32x1xi1> -> tensor<32x32xi1>
+    %mask_11 = tt.broadcast %mask_9 : tensor<1x32xi1> -> tensor<32x32xi1>
+    %mask_12 = arith.andi %mask_10, %mask_11 : tensor<32x32xi1>
+    %base_offs = tt.splat %N : i32 -> tensor<32x1xi32>
+    %base_offs_13 = arith.muli %mask, %base_offs : tensor<32x1xi32>
+    %base_offs_14 = tt.broadcast %base_offs_13 : tensor<32x1xi32> -> tensor<32x32xi32>
+    %base_offs_15 = tt.broadcast %mask_7 : tensor<1x32xi32> -> tensor<32x32xi32>
+    %base_offs_16 = arith.addi %base_offs_14, %base_offs_15 : tensor<32x32xi32>
+    %partial = tt.splat %workspace_ptr : !tt.ptr<f32> -> tensor<32x32x!tt.ptr<f32>>
+    %partial_17 = tt.addptr %partial, %base_offs_16 : tensor<32x32x!tt.ptr<f32>>, tensor<32x32xi32>
+    %acc = scf.for %split_id = %c0_i32 to %c8_i32 step %c1_i32 iter_args(%acc_18 = %cst) -> (tensor<32x32xf32>)  : i32 {
+      %partial_19 = arith.muli %split_id, %ROWS_PER_SPLIT : i32
+      %partial_20 = arith.muli %partial_19, %N : i32
+      %partial_21 = tt.splat %partial_20 : i32 -> tensor<32x32xi32>
+      %partial_22 = tt.addptr %partial_17, %partial_21 : tensor<32x32x!tt.ptr<f32>>, tensor<32x32xi32>
+      %partial_23 = tt.load %partial_22, %mask_12, %cst : tensor<32x32x!tt.ptr<f32>>
+      %acc_24 = arith.addf %acc_18, %partial_23 : tensor<32x32xf32>
+      scf.yield %acc_24 : tensor<32x32xf32>
+    }
+    %0 = tt.splat %out_ptr : !tt.ptr<bf16> -> tensor<32x32x!tt.ptr<bf16>>
+    %1 = tt.addptr %0, %base_offs_16 : tensor<32x32x!tt.ptr<bf16>>, tensor<32x32xi32>
+    %2 = arith.truncf %acc : tensor<32x32xf32> to tensor<32x32xbf16>
+    tt.store %1, %2, %mask_12 : tensor<32x32x!tt.ptr<bf16>>
+    tt.return
+  }
+}
