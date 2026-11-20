@@ -8,10 +8,11 @@ or triton, so host-side tooling can reuse the naming/manifest helpers)::
     from capture import CaptureSession, write_case, run_manifest_entry
 
 How capture works: every kernel compiled through Triton Beta ends up as a
-``CompiledKernel`` with an ``asm`` dict. The LLVM stage is
-``HIPBackend.make_amdgcn``, whose input is exactly ``asm["llir"]`` -- that
-string is the artifact we export, plus ``ttgir`` (translator input), ``ttir``
-and ``amdgcn`` (reference output) for provenance. Two hooks cover every
+``CompiledKernel`` with an ``asm`` dict. The LLVM stage input is exactly
+``asm["llir"]`` -- that string is the artifact we export, plus ``ttgir``
+(translator input), ``ttir`` and the backend reference output (``amdgcn``
+on AMD via ``HIPBackend.make_amdgcn``, ``ptx`` on NVIDIA via
+``CUDABackend.make_ptx``) for provenance. Two hooks cover every
 launch path:
 
 - ``JITFunction.run`` (covers ``@triton.jit`` launches and autotune winners:
@@ -37,7 +38,9 @@ import time
 MANIFEST_VERSION = 1
 
 # Stage preference order: llir is the deliverable, the rest is provenance.
-STAGES = ("llir", "ttgir", "ttir", "amdgcn")
+# amdgcn is the AMD reference output, ptx the NVIDIA one; each backend only
+# produces its own, so cases carry exactly one of them.
+STAGES = ("llir", "ttgir", "ttir", "amdgcn", "ptx")
 
 
 def case_dir(out_root: str, arch: str, source: str, target: str, case: str) -> str:

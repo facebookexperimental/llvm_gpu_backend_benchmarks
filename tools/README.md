@@ -10,19 +10,22 @@ buck2 run @fbcode//mode/opt-amd-gpu fbcode//triton/benchmarks/tools:verify_llir 
   --arch gfx942 --out ..
 ```
 
-Recompiles each `kernel.llir` through the Triton Beta AMD backend and compares
-it with the saved `kernel.amdgcn`. `--skip-round-trip` runs structural checks.
+Recompiles each `kernel.llir` through the Triton Beta backend (AMD or
+NVIDIA, per `--arch`) and compares it with the saved reference output
+(`kernel.amdgcn` / `kernel.ptx`). `--skip-round-trip` runs structural checks.
 
 ## Replay kernels on GPU
 
 ```bash
 buck2 run @fbcode//mode/opt-amd-gpu fbcode//triton/benchmarks/tools:launch_hip -- \
   --arch gfx942 --out .. --limit 5
+buck2 run fbcode//triton/benchmarks/tools:launch_cuda -- \
+  --arch sm100 --out .. --limit 5
 ```
 
-The launcher builds HSACO from LLVM IR, allocates the recorded inputs, launches
-through HIP, and reports latency and output finiteness. Replay requires valid
-launch metadata in `compile.json`.
+The launchers build HSACO (HIP) or CUBIN (CUDA) from LLVM IR, allocate the
+recorded inputs, launch through the runtime, and report latency and output
+finiteness. Replay requires valid launch metadata in `compile.json`.
 
 ## Prune location info
 
@@ -44,4 +47,4 @@ python3 collect_metadata.py --arch gfx942 --out ..
 ```
 
 Writes per-case FLOPs, argument sizes, and replay readiness to `metadata.json`.
-The tools support `gfx942` and `gfx950`.
+The tools support `gfx942`, `gfx950`, `gfx1250`, and `sm100`.

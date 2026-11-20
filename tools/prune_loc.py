@@ -32,6 +32,7 @@ STAGE_FILES = {
     "ttgir": "kernel.ttgir",
     "llir": "kernel.llir",
     "amdgcn": "kernel.amdgcn",
+    "ptx": "kernel.ptx",
 }
 
 _LOC_DEF_RE = re.compile(r"^\s*#loc\d*\s*=")
@@ -132,6 +133,19 @@ def strip_amdgcn(text: str) -> str:
     return "\n".join(lines) + "\n"
 
 
+_PTX_DEBUG_LABEL_RE = re.compile(r"^\$L__(?:tmp|func_begin|func_end|line_table)\w*:$")
+
+
+def strip_ptx(text: str) -> str:
+    """Strip assembler debug directives plus orphaned PTX debug labels."""
+    lines = [
+        line
+        for line in strip_amdgcn(text).splitlines()
+        if not _PTX_DEBUG_LABEL_RE.match(line.strip())
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def strip_text(filename: str, text: str) -> str:
     """Strip loc info for one artifact filename (unchanged if unknown)."""
     if filename in ("kernel.ttir", "kernel.ttgir"):
@@ -140,6 +154,9 @@ def strip_text(filename: str, text: str) -> str:
         return strip_llir(text)
     if filename == "kernel.amdgcn":
         return strip_amdgcn(text)
+    if filename == "kernel.ptx":
+        # PTX debug info uses the same .file/.loc directive spellings.
+        return strip_ptx(text)
     return text
 
 
@@ -235,7 +252,7 @@ def prune_tree(out_root: str, arch: str, dry_run: bool = False) -> dict:
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Prune loc info from exports.")
     parser.add_argument(
-        "--arch", required=True, choices=["gfx950", "gfx942", "gfx1250"]
+        "--arch", required=True, choices=["gfx950", "gfx942", "gfx1250", "sm100"]
     )
     parser.add_argument("--out", required=True, help="export root")
     parser.add_argument("--dry-run", action="store_true", help="report without writing")

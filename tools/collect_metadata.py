@@ -22,7 +22,8 @@ import sys
 
 VERSION = 1
 CASE_SUFFIX_RE = re.compile(r"__k\d+$")
-WAVEFRONT = 64  # AMD wavefront size (mirrors launch_hip)
+# Threads per warp/wavefront by arch (mirrors launch_hip / launch_cuda).
+WAVEFRONTS = {"gfx950": 64, "gfx942": 64, "gfx1250": 32, "sm100": 32}
 
 
 def _siblings():
@@ -236,7 +237,9 @@ def _launch_details(launch: dict, sig, strip_scratch, wavefront: int) -> dict:
     }
 
 
-def kernel_record(cdir: str, parse, strip_scratch, validate) -> dict:
+def kernel_record(
+    cdir: str, parse, strip_scratch, validate, wavefront: int = 64
+) -> dict:
     """One kernel's metadata: launch readiness plus summaries when valid."""
     rec: dict = {"dir": os.path.basename(cdir)}
     try:
@@ -265,7 +268,6 @@ def kernel_record(cdir: str, parse, strip_scratch, validate) -> dict:
         rec["status"] = "missing-launch"
         return rec
     try:
-        wavefront = 32 if compile_info.get("arch") == "gfx1250" else WAVEFRONT
         details = _launch_details(launch, sig, strip_scratch, wavefront)
     except (KeyError, TypeError, ValueError) as e:
         rec["status"] = "bad-launch"
@@ -316,9 +318,10 @@ def case_record(source: str, target: str, group: str, kernels: list) -> dict:
 def collect(out_root: str, arch: str) -> dict:
     """Collect per-case metadata for one arch. Returns the metadata doc."""
     iter_cases, parse, strip_scratch, validate = _siblings()
+    wavefront = WAVEFRONTS.get(arch, 64)
     groups: dict[tuple[str, str, str], list] = {}
     for source, target, case, cdir in iter_cases(out_root, arch):
-        rec = kernel_record(cdir, parse, strip_scratch, validate)
+        rec = kernel_record(cdir, parse, strip_scratch, validate, wavefront)
         groups.setdefault((source, target, group_key(case)), []).append(rec)
     cases = [
         case_record(source, target, group, sorted(kernels, key=lambda r: r["dir"]))
@@ -342,7 +345,7 @@ def collect(out_root: str, arch: str) -> dict:
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Collect corpus metadata.")
     parser.add_argument(
-        "--arch", required=True, choices=["gfx950", "gfx942", "gfx1250"]
+        "--arch", required=True, choices=["gfx950", "gfx942", "gfx1250", "sm100"]
     )
     parser.add_argument("--out", required=True, help="export root")
     args = parser.parse_args(argv)

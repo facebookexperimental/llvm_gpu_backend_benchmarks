@@ -33,6 +33,7 @@ _ASM_DEBUG_RE = re.compile(r"^\s*\.(cfi|Ltmp|debug)")
 _ASM_SKIP_RE = re.compile(r"^\s*\.(Lfunc_begin|Lline_table)")
 
 _KERNEL_RE = re.compile(r"define amdgpu_kernel void @([a-zA-Z_][a-zA-Z0-9_]*)")
+_PTX_KERNEL_RE = re.compile(r"define ptx_kernel void @([a-zA-Z_][a-zA-Z0-9_]*)")
 
 
 def _repo_rel(path: str) -> str:
@@ -110,24 +111,30 @@ def find_loc_problems(filename: str, text: str) -> list[str]:
         return _mlir_loc_problems(filename, text)
     if filename == "kernel.llir":
         return _llir_loc_problems(filename, text)
-    if filename == "kernel.amdgcn":
+    if filename in ("kernel.amdgcn", "kernel.ptx"):
         return _amdgcn_loc_problems(filename, text)
     return []
 
 
-def check_llir_structure(text: str) -> list[str]:
-    """Well-formed LLVM IR module for amdgcn; returns problem strings."""
+def check_llir_structure(text: str, arch: str = "gfx950") -> list[str]:
+    """Well-formed LLVM IR module for the arch; returns problem strings."""
     problems = []
     if "; ModuleID" not in text[:500] and "source_filename" not in text[:500]:
         problems.append("missing LLVM module header")
-    if not re.search(r'target triple = "amdgpu[\d.]*-amd-amdhsa"', text) and (
-        'target triple = "amdgcn-amd-amdhsa"' not in text
-    ):
-        problems.append("missing amdgcn triple")
+    if arch == "sm100":
+        # NVPTX LLIR from the MLIR LLVM dialect carries no target-triple
+        # line; the ptx_kernel definitions are the arch marker.
+        if not _PTX_KERNEL_RE.search(text):
+            problems.append("no ptx_kernel definition")
+    else:
+        if not re.search(r'target triple = "amdgpu[\d.]*-amd-amdhsa"', text) and (
+            'target triple = "amdgcn-amd-amdhsa"' not in text
+        ):
+            problems.append("missing amdgcn triple")
+        if not _KERNEL_RE.search(text):
+            problems.append("no amdgpu_kernel definition")
     if "target datalayout" not in text:
         problems.append("missing datalayout")
-    if not _KERNEL_RE.search(text):
-        problems.append("no amdgpu_kernel definition")
     for marker in ("tt.func", "#ttg", "ttg.", "// -----//"):
         if marker in text:
             problems.append(f"contains MLIR marker {marker!r}")
@@ -238,7 +245,7 @@ def _manifest_problems(
         return problems + ["manifest must contain exported artifacts"]
     problems.extend(_manifest_coverage(artifacts, cases, arch, source, target))
     for failure in manifest.get("failures", []):
-        if failure.get("status") != "provisional":
+        if failure.get("status") not in ("provisional", "skipped"):
             problems.append(f"ready target failed: {failure.get('target')}")
     return problems
 
@@ -272,7 +279,13 @@ def validate_tree(out_root: str, arch: str, source: str = "", target: str = "") 
     for s, t, case, cdir in _iter_case_dirs(out_root, arch, source, target):
         name = f"{s}/{t}/{case}"
         problems = []
-        for filename in ("kernel.ttir", "kernel.ttgir", "kernel.llir", "kernel.amdgcn"):
+        for filename in (
+            "kernel.ttir",
+            "kernel.ttgir",
+            "kernel.llir",
+            "kernel.amdgcn",
+            "kernel.ptx",
+        ):
             fpath = os.path.join(cdir, filename)
             if not os.path.isfile(fpath):
                 continue
@@ -281,7 +294,7 @@ def validate_tree(out_root: str, arch: str, source: str = "", target: str = "") 
         llir_path = os.path.join(cdir, "kernel.llir")
         if os.path.isfile(llir_path):
             with open(llir_path) as f:
-                problems.extend(check_llir_structure(f.read()))
+                problems.extend(check_llir_structure(f.read(), arch))
         problems.extend(check_hashes(cdir))
         if not os.path.isfile(llir_path):
             problems.append("missing kernel.llir")
@@ -310,7 +323,7 @@ def validate_tree(out_root: str, arch: str, source: str = "", target: str = "") 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Validate a benchmark export.")
     parser.add_argument(
-        "--arch", required=True, choices=["gfx950", "gfx942", "gfx1250"]
+        "--arch", required=True, choices=["gfx950", "gfx942", "gfx1250", "sm100"]
     )
     parser.add_argument("--out", required=True, help="export root (parent of <arch>)")
     parser.add_argument(

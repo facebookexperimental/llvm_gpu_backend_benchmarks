@@ -31,19 +31,22 @@ WARMUP = 10
 REPS = 30
 SEED = 0
 
-_SIG_RE = re.compile(r"define amdgpu_kernel void @([a-zA-Z_][a-zA-Z0-9_]*)\(")
+_SIG_RE = re.compile(
+    r"define (?:amdgpu_kernel|ptx_kernel) void @([a-zA-Z_][a-zA-Z0-9_]*)\("
+)
 _WARP_SIZE = 64
 
 
 def parse_kernel_signature(llir: str) -> tuple[str, list[tuple[str, int]]]:
-    """Parse the amdgpu_kernel/function name plus [(kind, bits)] params.
+    """Parse the kernel/function name plus [(kind, bits)] params.
 
+    Handles both AMD (``amdgpu_kernel``) and NVIDIA (``ptx_kernel``) LLIR.
     Kinds: ``ptr`` (any addrspace), ``int`` (iN), ``float`` (half/bfloat/
     float/double). Raises ValueError when no kernel or an unknown type.
     """
     m = _SIG_RE.search(llir)
     if not m:
-        raise ValueError("no amdgpu_kernel definition")
+        raise ValueError("no amdgpu_kernel/ptx_kernel definition")
     name = m.group(1)
     params = _kernel_param_text(llir, m.end())
     return name, [_classify_param(p) for p in _split_top_level(params)]
@@ -143,7 +146,8 @@ def validate_launch(launch: dict | None, sig: list[tuple[str, int]]) -> list[str
         problems.append("missing-num_warps")
     if block.get("num_ctas", 1) != 1:
         problems.append("unsupported: num_ctas != 1")
-    if block.get("cluster_dims") is not None:
+    cluster_dims = block.get("cluster_dims")
+    if cluster_dims is not None and any(int(v) != 1 for v in cluster_dims):
         problems.append("unsupported: cluster_dims set")
     for key in ("global_scratch_size", "profile_scratch_size"):
         size = block.get(key, 0)
@@ -467,7 +471,7 @@ def launch_case(
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Replay exported kernels via HIP.")
     parser.add_argument(
-        "--arch", required=True, choices=["gfx950", "gfx942", "gfx1250"]
+        "--arch", required=True, choices=["gfx950", "gfx942", "gfx1250", "sm100"]
     )
     parser.add_argument("--out", required=True, help="export root")
     parser.add_argument("--limit", type=int, default=0, help="launch at most N cases")
@@ -496,6 +500,9 @@ def main(argv=None) -> int:
         # pyrefly: ignore [missing-import]
         from llir_build import iter_cases
 
+    if args.arch == "sm100":
+        print("[launch] sm100 kernels replay via launch_cuda, not HIP", flush=True)
+        return 2
     hip = _hip()
     cases = [
         c

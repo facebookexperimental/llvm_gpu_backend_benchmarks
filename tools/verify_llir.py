@@ -3,18 +3,19 @@
 """Verify exported kernel.llir files are exactly the IR consumable by LLVM.
 
 For every case dir under <out>/<arch> with a kernel.llir, this re-feeds the
-saved LLVM IR text through the production Triton-Beta AMD backend stage
-(`HIPBackend.make_amdgcn`, the same `triton_amdgpu_compile` entry the
-exporters' compilations used) and compares the result with the saved
-kernel.amdgcn. An exact (or comment-normalized) match proves the .llir is
-byte-for-byte the input LLVM consumed.
+saved LLVM IR text through the production Triton-Beta backend stage
+(`HIPBackend.make_amdgcn` on AMD, `CUDABackend.make_ptx` on NVIDIA -- the
+same entries the exporters' compilations used) and compares the result
+with the saved reference output (kernel.amdgcn / kernel.ptx). An exact
+(or comment-normalized) match proves the .llir is byte-for-byte the input
+LLVM consumed.
 
 Run on the export host (CPU-only, no GPU kernels launched)::
 
     buck2 run @fbcode//mode/opt-amd-gpu fbcode//triton/benchmarks/tools:verify_llir -- \\
         --arch gfx950 --out /data/llvm_export_20250101
 
-Requires TRITON_AMD_CODEGEN_PATH (same as the exporters).
+Requires TRITON_AMD_CODEGEN_PATH on AMD (same as the exporters).
 """
 
 from __future__ import annotations
@@ -27,22 +28,34 @@ import re
 import sys
 
 import torch  # noqa: F401 - imported for triton backend discovery at runtime
-from triton.benchmarks.tools.llir_build import iter_cases, KERNEL_RE, round_trip
+from triton.benchmarks.tools.llir_build import (
+    iter_cases,
+    KERNEL_RE,
+    PTX_KERNEL_RE,
+    round_trip,
+    round_trip_ptx,
+)
 
 
-def structural_check(text: str) -> list[str]:
-    """Well-formed LLVM IR module for amdgcn; returns problem strings."""
+def structural_check(text: str, arch: str = "gfx950") -> list[str]:
+    """Well-formed LLVM IR module for the arch; returns problem strings."""
     problems = []
     if "; ModuleID" not in text[:500] and "source_filename" not in text[:500]:
         problems.append("missing LLVM module header")
-    if not re.search(r'target triple = "amdgpu[\d.]*-amd-amdhsa"', text) and (
-        'target triple = "amdgcn-amd-amdhsa"' not in text
-    ):
-        problems.append("missing amdgcn triple")
+    if arch == "sm100":
+        # NVPTX LLIR from the MLIR LLVM dialect carries no target-triple
+        # line; the ptx_kernel definitions are the arch marker.
+        if not PTX_KERNEL_RE.search(text):
+            problems.append("no ptx_kernel definition")
+    else:
+        if not re.search(r'target triple = "amdgpu[\d.]*-amd-amdhsa"', text) and (
+            'target triple = "amdgcn-amd-amdhsa"' not in text
+        ):
+            problems.append("missing amdgcn triple")
+        if not KERNEL_RE.search(text):
+            problems.append("no amdgpu_kernel definition")
     if "target datalayout" not in text:
         problems.append("missing datalayout")
-    if not KERNEL_RE.search(text):
-        problems.append("no amdgpu_kernel definition")
     for marker in ("tt.func", "#ttg", "ttg.", "// -----//"):
         if marker in text:
             problems.append(f"contains MLIR marker {marker!r}")
@@ -59,16 +72,30 @@ def normalize_amdgcn(text: str) -> str:
     return "\n".join(out) + "\n"
 
 
+def normalize_ptx(text: str) -> str:
+    """Drop // comments/blank lines for comparison (code lines only)."""
+    out = []
+    for line in text.splitlines():
+        line = line.split("//")[0].rstrip()
+        if line.strip():
+            out.append(line)
+    return "\n".join(out) + "\n"
+
+
+def _normalize(text: str, arch: str) -> str:
+    return normalize_ptx(text) if arch == "sm100" else normalize_amdgcn(text)
+
+
 _DEFAULT_LABEL = "disable_packed_fp32_ops=False enable_fp_fusion=True"
 
 
-def _match_candidate(candidates, ref, ref_norm):
+def _match_candidate(candidates, ref, ref_norm, arch: str = "gfx950"):
     """First exact match wins, else first comment-normalized match."""
     fallback = None
     for opts, regen in candidates:
         if regen == ref:
             return ("exact", opts)
-        if fallback is None and normalize_amdgcn(regen) == ref_norm:
+        if fallback is None and _normalize(regen, arch) == ref_norm:
             fallback = ("normalized", opts)
     return fallback
 
@@ -77,29 +104,31 @@ def _check_case(source, target, case, cdir, arch, dump_regen) -> str:
     """Verify one case dir. Returns a status counter name; prints details."""
     name = f"{source}/{target}/{case}"
     llir = open(os.path.join(cdir, "kernel.llir")).read()
-    problems = structural_check(llir)
+    problems = structural_check(llir, arch)
     if problems:
         print(f"[verify] STRUCT {name}: {problems}")
         return "structural_fail"
-    ref_path = os.path.join(cdir, "kernel.amdgcn")
+    ref_name = "kernel.ptx" if arch == "sm100" else "kernel.amdgcn"
+    ref_path = os.path.join(cdir, ref_name)
     if not os.path.isfile(ref_path):
-        print(f"[verify] SKIP {name}: no kernel.amdgcn")
+        print(f"[verify] SKIP {name}: no {ref_name}")
         return "skip"
+    trip = round_trip_ptx if arch == "sm100" else round_trip
     try:
-        candidates = round_trip(llir, arch)
+        candidates = trip(llir, arch)
     except Exception as e:  # noqa: BLE001 - record and continue
         print(f"[verify] ROUNDTRIP-FAIL {name}: {e}")
         return "roundtrip_fail"
     ref = open(ref_path).read()
-    matched = _match_candidate(candidates, ref, normalize_amdgcn(ref))
-    if matched is None:
+    matched = _match_candidate(candidates, ref, _normalize(ref, arch), arch)
+    if matched is None and arch != "sm100":
         # Fall back to the full grid (TLX per-config pressure flags).
         try:
             candidates = round_trip(llir, arch, full_grid=True)
         except Exception as e:  # noqa: BLE001 - record and continue
             print(f"[verify] ROUNDTRIP-FAIL {name}: {e}")
             return "roundtrip_fail"
-        matched = _match_candidate(candidates, ref, normalize_amdgcn(ref))
+        matched = _match_candidate(candidates, ref, _normalize(ref, arch), arch)
     if matched is not None:
         if matched[1] != _DEFAULT_LABEL:
             print(f"[verify] MATCH {name} [{matched[0]} {matched[1]}]")
@@ -127,7 +156,7 @@ def _check_case(source, target, case, cdir, arch, dump_regen) -> str:
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Verify exported LLIR via LLVM.")
     parser.add_argument(
-        "--arch", required=True, choices=["gfx950", "gfx942", "gfx1250"]
+        "--arch", required=True, choices=["gfx950", "gfx942", "gfx1250", "sm100"]
     )
     parser.add_argument("--out", required=True, help="export root")
     parser.add_argument("--limit", type=int, default=0, help="check at most N cases")
@@ -163,7 +192,7 @@ def main(argv=None) -> int:
     for i, (source, target, case, cdir) in enumerate(cases):
         if args.skip_round_trip:
             llir = open(os.path.join(cdir, "kernel.llir")).read()
-            problems = structural_check(llir)
+            problems = structural_check(llir, args.arch)
             if problems:
                 counts["structural_fail"] += 1
                 print(f"[verify] STRUCT {source}/{target}/{case}: {problems}")
