@@ -688,6 +688,9 @@ def append_run_manifest(
             "artifacts": [],
             "failures": [],
         }
+    hashes = manifest.get("automation_hashes")
+    if isinstance(hashes, dict):
+        hashes.pop(source, None)
     manifest["artifacts"] = [
         a for a in manifest.get("artifacts", []) if a.get("source") != source
     ]
