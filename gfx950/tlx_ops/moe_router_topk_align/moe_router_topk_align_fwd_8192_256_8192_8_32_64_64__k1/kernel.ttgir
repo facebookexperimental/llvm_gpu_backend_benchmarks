@@ -1,0 +1,475 @@
+#blocked = #ttg.blocked<{sizePerThread = [1, 4], threadsPerWarp = [1, 64], warpsPerCTA = [1, 1], order = [1, 0]}>
+#blocked1 = #ttg.blocked<{sizePerThread = [1, 1], threadsPerWarp = [8, 8], warpsPerCTA = [1, 1], order = [1, 0]}>
+#linear = #ttg.linear<{register = [[0, 1], [0, 2], [0, 4], [0, 8]], lane = [[0, 16], [0, 32], [0, 64], [0, 128], [1, 0], [2, 0]], warp = [], block = []}>
+module attributes {tlx.has_tlx_ops = true, triton.skip_generic_pipeline, "ttg.cluster-dim-x" = 1 : i32, "ttg.cluster-dim-y" = 1 : i32, "ttg.cluster-dim-z" = 1 : i32, "ttg.num-ctas" = 1 : i32, "ttg.num-warps" = 1 : i32, ttg.target = "hip:gfx950", "ttg.threads-per-warp" = 64 : i32} {
+  tt.func public @_routing_kernel(%logits_ptr: !tt.ptr<f32> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %bias_ptr: !tt.ptr<f32> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %weights_ptr: !tt.ptr<f32> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %ids_ptr: !tt.ptr<i32> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %num_tokens: i32 {tt.divisibility = 16 : i32}, %num_experts: i32 {tt.divisibility = 16 : i32}, %stride_lm: i32 {tt.divisibility = 16 : i32}, %stride_wm: i32, %stride_im: i32, %multiplier: f32, %route_scale: f32, %eps: f32, %split_stride: i32 {tt.divisibility = 16 : i32}) attributes {noinline = false} {
+    %logits = arith.constant dense<0.000000e+00> : tensor<4x256xf32, #blocked>
+    %score_sum = arith.constant dense<0.000000e+00> : tensor<4xf32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %cst = arith.constant dense<1.000000e+00> : tensor<4x8xf32, #linear>
+    %cst_0 = arith.constant dense<0.000000e+00> : tensor<4x8xf32, #linear>
+    %found = arith.constant dense<0> : tensor<4x8xi32, #linear>
+    %picked_ids = arith.constant dense<-1> : tensor<4x8xi32, #linear>
+    %cst_1 = arith.constant dense<0> : tensor<1x8xi32, #linear>
+    %cst_2 = arith.constant dense<1> : tensor<1x8xi32, #linear>
+    %cst_3 = arith.constant dense<2> : tensor<1x8xi32, #linear>
+    %cst_4 = arith.constant dense<3> : tensor<1x8xi32, #linear>
+    %cst_5 = arith.constant dense<4> : tensor<1x8xi32, #linear>
+    %cst_6 = arith.constant dense<5> : tensor<1x8xi32, #linear>
+    %cst_7 = arith.constant dense<6> : tensor<1x8xi32, #linear>
+    %cst_8 = arith.constant dense<7> : tensor<1x8xi32, #linear>
+    %out_mask = arith.constant dense<8> : tensor<1x8xi32, #blocked1>
+    %logits_9 = arith.constant 3 : i64
+    %logits_10 = arith.constant 2 : i64
+    %rows = arith.constant 4 : i32
+    %cst_11 = arith.constant dense<0.000000e+00> : tensor<4x256xf32, #linear>
+    %scores = arith.constant dense<1.000000e+00> : tensor<4x256xf32, #linear>
+    %cst_12 = arith.constant dense<-1> : tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %cst_13 = arith.constant dense<-2147483648> : tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %cst_14 = arith.constant dense<256> : tensor<4x256xi32, #linear>
+    %key = arith.constant dense<31> : tensor<4x256xi32, #linear>
+    %key_15 = arith.constant dense<2147483647> : tensor<4x256xi32, #linear>
+    %cst_16 = arith.constant dense<-2147483648> : tensor<4x256xi32, #linear>
+    %rows_17 = tt.get_program_id x : i32
+    %rows_18 = arith.muli %rows_17, %rows : i32
+    %rows_19 = tt.make_range {end = 4 : i32, start = 0 : i32} : tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %rows_20 = tt.make_range {end = 4 : i32, start = 0 : i32} : tensor<4xi32, #ttg.slice<{dim = 1, parent = #blocked1}>>
+    %rows_21 = tt.splat %rows_18 : i32 -> tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %rows_22 = tt.splat %rows_18 : i32 -> tensor<4xi32, #ttg.slice<{dim = 1, parent = #blocked1}>>
+    %rows_23 = arith.addi %rows_21, %rows_19 : tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %rows_24 = arith.addi %rows_22, %rows_20 : tensor<4xi32, #ttg.slice<{dim = 1, parent = #blocked1}>>
+    %row_mask = tt.splat %num_tokens : i32 -> tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %row_mask_25 = tt.splat %num_tokens : i32 -> tensor<4xi32, #ttg.slice<{dim = 1, parent = #blocked1}>>
+    %row_mask_26 = arith.cmpi slt, %rows_23, %row_mask : tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %row_mask_27 = arith.cmpi slt, %rows_24, %row_mask_25 : tensor<4xi32, #ttg.slice<{dim = 1, parent = #blocked1}>>
+    %rows64 = arith.extsi %rows_23 : tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>> to tensor<4xi64, #ttg.slice<{dim = 1, parent = #linear}>>
+    %rows64_28 = arith.extsi %rows_24 : tensor<4xi32, #ttg.slice<{dim = 1, parent = #blocked1}>> to tensor<4xi64, #ttg.slice<{dim = 1, parent = #blocked1}>>
+    %offs = tt.make_range {end = 256 : i32, start = 0 : i32} : tensor<256xi32, #ttg.slice<{dim = 0, parent = #linear}>>
+    %mask = tt.expand_dims %row_mask_26 {axis = 1 : i32} : tensor<4xi1, #ttg.slice<{dim = 1, parent = #linear}>> -> tensor<4x1xi1, #linear>
+    %mask_29 = tt.expand_dims %row_mask_27 {axis = 1 : i32} : tensor<4xi1, #ttg.slice<{dim = 1, parent = #blocked1}>> -> tensor<4x1xi1, #blocked1>
+    %mask_30 = tt.splat %num_experts : i32 -> tensor<256xi32, #ttg.slice<{dim = 0, parent = #linear}>>
+    %mask_31 = arith.cmpi slt, %offs, %mask_30 : tensor<256xi32, #ttg.slice<{dim = 0, parent = #linear}>>
+    %mask_32 = tt.expand_dims %mask_31 {axis = 0 : i32} : tensor<256xi1, #ttg.slice<{dim = 0, parent = #linear}>> -> tensor<1x256xi1, #linear>
+    %mask_33 = tt.broadcast %mask : tensor<4x1xi1, #linear> -> tensor<4x256xi1, #linear>
+    %mask_34 = tt.broadcast %mask_32 : tensor<1x256xi1, #linear> -> tensor<4x256xi1, #linear>
+    %mask_35 = arith.andi %mask_33, %mask_34 : tensor<4x256xi1, #linear>
+    %experts = tt.expand_dims %offs {axis = 0 : i32} : tensor<256xi32, #ttg.slice<{dim = 0, parent = #linear}>> -> tensor<1x256xi32, #linear>
+    %experts_36 = tt.broadcast %experts : tensor<1x256xi32, #linear> -> tensor<4x256xi32, #linear>
+    %tile = arith.extsi %stride_lm : i32 to i64
+    %tile_37 = arith.extsi %experts_36 : tensor<4x256xi32, #linear> to tensor<4x256xi64, #linear>
+    %logits_38 = tt.expand_dims %rows64 {axis = 1 : i32} : tensor<4xi64, #ttg.slice<{dim = 1, parent = #linear}>> -> tensor<4x1xi64, #linear>
+    %logits_39 = tt.splat %tile : i64 -> tensor<4x1xi64, #linear>
+    %logits_40 = arith.muli %logits_38, %logits_39 : tensor<4x1xi64, #linear>
+    %logits_41 = tt.broadcast %logits_40 : tensor<4x1xi64, #linear> -> tensor<4x256xi64, #linear>
+    %logits_42 = arith.addi %logits_41, %tile_37 : tensor<4x256xi64, #linear>
+    %logits_43 = arith.trunci %logits_42 : tensor<4x256xi64, #linear> to tensor<4x256xi32, #linear>
+    %logits_44 = ttg.convert_layout %logits_43 : tensor<4x256xi32, #linear> -> tensor<4x256xi32, #blocked>
+    %logits_45 = ttg.convert_layout %mask_35 : tensor<4x256xi1, #linear> -> tensor<4x256xi1, #blocked>
+    %logits_46 = amdg.buffer_load %logits_ptr[%logits_44], %logits_45, %logits {contiguity = 4 : i32} : !tt.ptr<f32> -> tensor<4x256xf32, #blocked>
+    %logits_47 = arith.extsi %split_stride : i32 to i64
+    %logits_48 = tt.splat %split_stride : i32 -> tensor<4x256xi32, #linear>
+    %logits_49 = arith.extsi %logits_48 : tensor<4x256xi32, #linear> to tensor<4x256xi64, #linear>
+    %logits_50 = arith.addi %logits_42, %logits_49 : tensor<4x256xi64, #linear>
+    %logits_51 = arith.trunci %logits_50 : tensor<4x256xi64, #linear> to tensor<4x256xi32, #linear>
+    %logits_52 = ttg.convert_layout %logits_51 : tensor<4x256xi32, #linear> -> tensor<4x256xi32, #blocked>
+    %logits_53 = amdg.buffer_load %logits_ptr[%logits_52], %logits_45, %logits {contiguity = 4 : i32} : !tt.ptr<f32> -> tensor<4x256xf32, #blocked>
+    %logits_54 = arith.addf %logits_46, %logits_53 : tensor<4x256xf32, #blocked>
+    %logits_55 = arith.muli %logits_47, %logits_10 : i64
+    %logits_56 = arith.trunci %logits_55 : i64 to i32
+    %logits_57 = tt.splat %logits_56 : i32 -> tensor<4x256xi32, #linear>
+    %logits_58 = arith.extsi %logits_57 : tensor<4x256xi32, #linear> to tensor<4x256xi64, #linear>
+    %logits_59 = arith.addi %logits_42, %logits_58 : tensor<4x256xi64, #linear>
+    %logits_60 = arith.trunci %logits_59 : tensor<4x256xi64, #linear> to tensor<4x256xi32, #linear>
+    %logits_61 = ttg.convert_layout %logits_60 : tensor<4x256xi32, #linear> -> tensor<4x256xi32, #blocked>
+    %logits_62 = amdg.buffer_load %logits_ptr[%logits_61], %logits_45, %logits {contiguity = 4 : i32} : !tt.ptr<f32> -> tensor<4x256xf32, #blocked>
+    %logits_63 = arith.addf %logits_54, %logits_62 : tensor<4x256xf32, #blocked>
+    %logits_64 = arith.muli %logits_47, %logits_9 : i64
+    %logits_65 = arith.trunci %logits_64 : i64 to i32
+    %logits_66 = tt.splat %logits_65 : i32 -> tensor<4x256xi32, #linear>
+    %logits_67 = arith.extsi %logits_66 : tensor<4x256xi32, #linear> to tensor<4x256xi64, #linear>
+    %logits_68 = arith.addi %logits_42, %logits_67 : tensor<4x256xi64, #linear>
+    %logits_69 = arith.trunci %logits_68 : tensor<4x256xi64, #linear> to tensor<4x256xi32, #linear>
+    %logits_70 = ttg.convert_layout %logits_69 : tensor<4x256xi32, #linear> -> tensor<4x256xi32, #blocked>
+    %logits_71 = amdg.buffer_load %logits_ptr[%logits_70], %logits_45, %logits {contiguity = 4 : i32} : !tt.ptr<f32> -> tensor<4x256xf32, #blocked>
+    %logits_72 = arith.addf %logits_63, %logits_71 : tensor<4x256xf32, #blocked>
+    %logits_73 = ttg.convert_layout %logits_72 : tensor<4x256xf32, #blocked> -> tensor<4x256xf32, #linear>
+    %bias = ttg.convert_layout %experts_36 : tensor<4x256xi32, #linear> -> tensor<4x256xi32, #blocked>
+    %bias_74 = amdg.buffer_load %bias_ptr[%bias], %logits_45, %logits {contiguity = 4 : i32} : !tt.ptr<f32> -> tensor<4x256xf32, #blocked>
+    %bias_75 = ttg.convert_layout %bias_74 : tensor<4x256xf32, #blocked> -> tensor<4x256xf32, #linear>
+    %scores_76 = tt.splat %multiplier : f32 -> tensor<4x256xf32, #linear>
+    %scores_77 = arith.mulf %logits_73, %scores_76 : tensor<4x256xf32, #linear>
+    %scores_78 = arith.negf %scores_77 : tensor<4x256xf32, #linear>
+    %scores_79 = math.exp %scores_78 : tensor<4x256xf32, #linear>
+    %scores_80 = arith.addf %scores_79, %scores : tensor<4x256xf32, #linear>
+    %scores_81 = arith.divf %scores, %scores_80 : tensor<4x256xf32, #linear>
+    %biased = arith.addf %scores_81, %bias_75 : tensor<4x256xf32, #linear>
+    %bits = tt.bitcast %biased : tensor<4x256xf32, #linear> -> tensor<4x256xi32, #linear>
+    %key_82 = arith.cmpf oeq, %biased, %biased : tensor<4x256xf32, #linear>
+    %key_83 = arith.andi %mask_35, %key_82 : tensor<4x256xi1, #linear>
+    %key_84 = arith.shrsi %bits, %key : tensor<4x256xi32, #linear>
+    %key_85 = arith.andi %key_84, %key_15 : tensor<4x256xi32, #linear>
+    %key_86 = arith.xori %bits, %key_85 : tensor<4x256xi32, #linear>
+    %key_87 = arith.select %key_83, %key_86, %cst_16 : tensor<4x256xi1, #linear>, tensor<4x256xi32, #linear>
+    %slots = tt.make_range {end = 8 : i32, start = 0 : i32} : tensor<8xi32, #ttg.slice<{dim = 0, parent = #linear}>>
+    %slots_88 = tt.make_range {end = 8 : i32, start = 0 : i32} : tensor<8xi32, #ttg.slice<{dim = 0, parent = #blocked1}>>
+    %slots_89 = tt.expand_dims %slots {axis = 0 : i32} : tensor<8xi32, #ttg.slice<{dim = 0, parent = #linear}>> -> tensor<1x8xi32, #linear>
+    %slots_90 = tt.expand_dims %slots_88 {axis = 0 : i32} : tensor<8xi32, #ttg.slice<{dim = 0, parent = #blocked1}>> -> tensor<1x8xi32, #blocked1>
+    %value = "tt.reduce"(%key_87) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%best: i32, %best_292: i32):
+      %value_293 = arith.maxsi %best, %best_292 : i32
+      tt.reduce.return %value_293 : i32
+    }) : (tensor<4x256xi32, #linear>) -> tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %idx = tt.expand_dims %value {axis = 1 : i32} : tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>> -> tensor<4x1xi32, #linear>
+    %idx_91 = tt.broadcast %idx : tensor<4x1xi32, #linear> -> tensor<4x256xi32, #linear>
+    %idx_92 = arith.cmpi eq, %key_87, %idx_91 : tensor<4x256xi32, #linear>
+    %idx_93 = arith.select %idx_92, %experts_36, %cst_14 : tensor<4x256xi1, #linear>, tensor<4x256xi32, #linear>
+    %value_94 = "tt.reduce"(%idx_93) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%idx_292: i32, %idx_293: i32):
+      %value_294 = arith.minsi %idx_292, %idx_293 : i32
+      tt.reduce.return %value_294 : i32
+    }) : (tensor<4x256xi32, #linear>) -> tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %idx_95 = arith.cmpi eq, %value, %cst_13 : tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %idx_96 = arith.select %idx_95, %cst_12, %value_94 : tensor<4xi1, #ttg.slice<{dim = 1, parent = #linear}>>, tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %picked_ids_97 = arith.cmpi eq, %slots_89, %cst_1 : tensor<1x8xi32, #linear>
+    %picked_ids_98 = tt.expand_dims %idx_96 {axis = 1 : i32} : tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>> -> tensor<4x1xi32, #linear>
+    %picked_ids_99 = tt.broadcast %picked_ids_98 : tensor<4x1xi32, #linear> -> tensor<4x8xi32, #linear>
+    %picked_ids_100 = tt.broadcast %picked_ids_97 : tensor<1x8xi1, #linear> -> tensor<4x8xi1, #linear>
+    %picked_ids_101 = arith.select %picked_ids_100, %picked_ids_99, %picked_ids : tensor<4x8xi1, #linear>, tensor<4x8xi32, #linear>
+    %pick = tt.broadcast %picked_ids_98 : tensor<4x1xi32, #linear> -> tensor<4x256xi32, #linear>
+    %pick_102 = arith.cmpi eq, %experts_36, %pick : tensor<4x256xi32, #linear>
+    %pick_103 = arith.select %pick_102, %logits_73, %cst_11 : tensor<4x256xi1, #linear>, tensor<4x256xf32, #linear>
+    %pick_104 = "tt.reduce"(%pick_103) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%pick_292: f32, %pick_293: f32):
+      %pick_294 = arith.addf %pick_292, %pick_293 : f32
+      tt.reduce.return %pick_294 : f32
+    }) : (tensor<4x256xf32, #linear>) -> tensor<4xf32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %picked_logits = tt.expand_dims %pick_104 {axis = 1 : i32} : tensor<4xf32, #ttg.slice<{dim = 1, parent = #linear}>> -> tensor<4x1xf32, #linear>
+    %picked_logits_105 = tt.broadcast %picked_logits : tensor<4x1xf32, #linear> -> tensor<4x8xf32, #linear>
+    %picked_logits_106 = arith.select %picked_ids_100, %picked_logits_105, %cst_0 : tensor<4x8xi1, #linear>, tensor<4x8xf32, #linear>
+    %key_107 = arith.select %pick_102, %cst_16, %key_87 : tensor<4x256xi1, #linear>, tensor<4x256xi32, #linear>
+    %value_108 = "tt.reduce"(%key_107) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%best: i32, %best_292: i32):
+      %value_293 = arith.maxsi %best, %best_292 : i32
+      tt.reduce.return %value_293 : i32
+    }) : (tensor<4x256xi32, #linear>) -> tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %idx_109 = tt.expand_dims %value_108 {axis = 1 : i32} : tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>> -> tensor<4x1xi32, #linear>
+    %idx_110 = tt.broadcast %idx_109 : tensor<4x1xi32, #linear> -> tensor<4x256xi32, #linear>
+    %idx_111 = arith.cmpi eq, %key_107, %idx_110 : tensor<4x256xi32, #linear>
+    %idx_112 = arith.select %idx_111, %experts_36, %cst_14 : tensor<4x256xi1, #linear>, tensor<4x256xi32, #linear>
+    %value_113 = "tt.reduce"(%idx_112) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%idx_292: i32, %idx_293: i32):
+      %value_294 = arith.minsi %idx_292, %idx_293 : i32
+      tt.reduce.return %value_294 : i32
+    }) : (tensor<4x256xi32, #linear>) -> tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %idx_114 = arith.cmpi eq, %value_108, %cst_13 : tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %idx_115 = arith.select %idx_114, %cst_12, %value_113 : tensor<4xi1, #ttg.slice<{dim = 1, parent = #linear}>>, tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %picked_ids_116 = arith.cmpi eq, %slots_89, %cst_2 : tensor<1x8xi32, #linear>
+    %picked_ids_117 = tt.expand_dims %idx_115 {axis = 1 : i32} : tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>> -> tensor<4x1xi32, #linear>
+    %picked_ids_118 = tt.broadcast %picked_ids_117 : tensor<4x1xi32, #linear> -> tensor<4x8xi32, #linear>
+    %picked_ids_119 = tt.broadcast %picked_ids_116 : tensor<1x8xi1, #linear> -> tensor<4x8xi1, #linear>
+    %picked_ids_120 = arith.select %picked_ids_119, %picked_ids_118, %picked_ids_101 : tensor<4x8xi1, #linear>, tensor<4x8xi32, #linear>
+    %pick_121 = tt.broadcast %picked_ids_117 : tensor<4x1xi32, #linear> -> tensor<4x256xi32, #linear>
+    %pick_122 = arith.cmpi eq, %experts_36, %pick_121 : tensor<4x256xi32, #linear>
+    %pick_123 = arith.select %pick_122, %logits_73, %cst_11 : tensor<4x256xi1, #linear>, tensor<4x256xf32, #linear>
+    %pick_124 = "tt.reduce"(%pick_123) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%pick_292: f32, %pick_293: f32):
+      %pick_294 = arith.addf %pick_292, %pick_293 : f32
+      tt.reduce.return %pick_294 : f32
+    }) : (tensor<4x256xf32, #linear>) -> tensor<4xf32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %picked_logits_125 = tt.expand_dims %pick_124 {axis = 1 : i32} : tensor<4xf32, #ttg.slice<{dim = 1, parent = #linear}>> -> tensor<4x1xf32, #linear>
+    %picked_logits_126 = tt.broadcast %picked_logits_125 : tensor<4x1xf32, #linear> -> tensor<4x8xf32, #linear>
+    %picked_logits_127 = arith.select %picked_ids_119, %picked_logits_126, %picked_logits_106 : tensor<4x8xi1, #linear>, tensor<4x8xf32, #linear>
+    %key_128 = arith.select %pick_122, %cst_16, %key_107 : tensor<4x256xi1, #linear>, tensor<4x256xi32, #linear>
+    %value_129 = "tt.reduce"(%key_128) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%best: i32, %best_292: i32):
+      %value_293 = arith.maxsi %best, %best_292 : i32
+      tt.reduce.return %value_293 : i32
+    }) : (tensor<4x256xi32, #linear>) -> tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %idx_130 = tt.expand_dims %value_129 {axis = 1 : i32} : tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>> -> tensor<4x1xi32, #linear>
+    %idx_131 = tt.broadcast %idx_130 : tensor<4x1xi32, #linear> -> tensor<4x256xi32, #linear>
+    %idx_132 = arith.cmpi eq, %key_128, %idx_131 : tensor<4x256xi32, #linear>
+    %idx_133 = arith.select %idx_132, %experts_36, %cst_14 : tensor<4x256xi1, #linear>, tensor<4x256xi32, #linear>
+    %value_134 = "tt.reduce"(%idx_133) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%idx_292: i32, %idx_293: i32):
+      %value_294 = arith.minsi %idx_292, %idx_293 : i32
+      tt.reduce.return %value_294 : i32
+    }) : (tensor<4x256xi32, #linear>) -> tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %idx_135 = arith.cmpi eq, %value_129, %cst_13 : tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %idx_136 = arith.select %idx_135, %cst_12, %value_134 : tensor<4xi1, #ttg.slice<{dim = 1, parent = #linear}>>, tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %picked_ids_137 = arith.cmpi eq, %slots_89, %cst_3 : tensor<1x8xi32, #linear>
+    %picked_ids_138 = tt.expand_dims %idx_136 {axis = 1 : i32} : tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>> -> tensor<4x1xi32, #linear>
+    %picked_ids_139 = tt.broadcast %picked_ids_138 : tensor<4x1xi32, #linear> -> tensor<4x8xi32, #linear>
+    %picked_ids_140 = tt.broadcast %picked_ids_137 : tensor<1x8xi1, #linear> -> tensor<4x8xi1, #linear>
+    %picked_ids_141 = arith.select %picked_ids_140, %picked_ids_139, %picked_ids_120 : tensor<4x8xi1, #linear>, tensor<4x8xi32, #linear>
+    %pick_142 = tt.broadcast %picked_ids_138 : tensor<4x1xi32, #linear> -> tensor<4x256xi32, #linear>
+    %pick_143 = arith.cmpi eq, %experts_36, %pick_142 : tensor<4x256xi32, #linear>
+    %pick_144 = arith.select %pick_143, %logits_73, %cst_11 : tensor<4x256xi1, #linear>, tensor<4x256xf32, #linear>
+    %pick_145 = "tt.reduce"(%pick_144) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%pick_292: f32, %pick_293: f32):
+      %pick_294 = arith.addf %pick_292, %pick_293 : f32
+      tt.reduce.return %pick_294 : f32
+    }) : (tensor<4x256xf32, #linear>) -> tensor<4xf32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %picked_logits_146 = tt.expand_dims %pick_145 {axis = 1 : i32} : tensor<4xf32, #ttg.slice<{dim = 1, parent = #linear}>> -> tensor<4x1xf32, #linear>
+    %picked_logits_147 = tt.broadcast %picked_logits_146 : tensor<4x1xf32, #linear> -> tensor<4x8xf32, #linear>
+    %picked_logits_148 = arith.select %picked_ids_140, %picked_logits_147, %picked_logits_127 : tensor<4x8xi1, #linear>, tensor<4x8xf32, #linear>
+    %key_149 = arith.select %pick_143, %cst_16, %key_128 : tensor<4x256xi1, #linear>, tensor<4x256xi32, #linear>
+    %value_150 = "tt.reduce"(%key_149) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%best: i32, %best_292: i32):
+      %value_293 = arith.maxsi %best, %best_292 : i32
+      tt.reduce.return %value_293 : i32
+    }) : (tensor<4x256xi32, #linear>) -> tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %idx_151 = tt.expand_dims %value_150 {axis = 1 : i32} : tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>> -> tensor<4x1xi32, #linear>
+    %idx_152 = tt.broadcast %idx_151 : tensor<4x1xi32, #linear> -> tensor<4x256xi32, #linear>
+    %idx_153 = arith.cmpi eq, %key_149, %idx_152 : tensor<4x256xi32, #linear>
+    %idx_154 = arith.select %idx_153, %experts_36, %cst_14 : tensor<4x256xi1, #linear>, tensor<4x256xi32, #linear>
+    %value_155 = "tt.reduce"(%idx_154) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%idx_292: i32, %idx_293: i32):
+      %value_294 = arith.minsi %idx_292, %idx_293 : i32
+      tt.reduce.return %value_294 : i32
+    }) : (tensor<4x256xi32, #linear>) -> tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %idx_156 = arith.cmpi eq, %value_150, %cst_13 : tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %idx_157 = arith.select %idx_156, %cst_12, %value_155 : tensor<4xi1, #ttg.slice<{dim = 1, parent = #linear}>>, tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %picked_ids_158 = arith.cmpi eq, %slots_89, %cst_4 : tensor<1x8xi32, #linear>
+    %picked_ids_159 = tt.expand_dims %idx_157 {axis = 1 : i32} : tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>> -> tensor<4x1xi32, #linear>
+    %picked_ids_160 = tt.broadcast %picked_ids_159 : tensor<4x1xi32, #linear> -> tensor<4x8xi32, #linear>
+    %picked_ids_161 = tt.broadcast %picked_ids_158 : tensor<1x8xi1, #linear> -> tensor<4x8xi1, #linear>
+    %picked_ids_162 = arith.select %picked_ids_161, %picked_ids_160, %picked_ids_141 : tensor<4x8xi1, #linear>, tensor<4x8xi32, #linear>
+    %pick_163 = tt.broadcast %picked_ids_159 : tensor<4x1xi32, #linear> -> tensor<4x256xi32, #linear>
+    %pick_164 = arith.cmpi eq, %experts_36, %pick_163 : tensor<4x256xi32, #linear>
+    %pick_165 = arith.select %pick_164, %logits_73, %cst_11 : tensor<4x256xi1, #linear>, tensor<4x256xf32, #linear>
+    %pick_166 = "tt.reduce"(%pick_165) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%pick_292: f32, %pick_293: f32):
+      %pick_294 = arith.addf %pick_292, %pick_293 : f32
+      tt.reduce.return %pick_294 : f32
+    }) : (tensor<4x256xf32, #linear>) -> tensor<4xf32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %picked_logits_167 = tt.expand_dims %pick_166 {axis = 1 : i32} : tensor<4xf32, #ttg.slice<{dim = 1, parent = #linear}>> -> tensor<4x1xf32, #linear>
+    %picked_logits_168 = tt.broadcast %picked_logits_167 : tensor<4x1xf32, #linear> -> tensor<4x8xf32, #linear>
+    %picked_logits_169 = arith.select %picked_ids_161, %picked_logits_168, %picked_logits_148 : tensor<4x8xi1, #linear>, tensor<4x8xf32, #linear>
+    %key_170 = arith.select %pick_164, %cst_16, %key_149 : tensor<4x256xi1, #linear>, tensor<4x256xi32, #linear>
+    %value_171 = "tt.reduce"(%key_170) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%best: i32, %best_292: i32):
+      %value_293 = arith.maxsi %best, %best_292 : i32
+      tt.reduce.return %value_293 : i32
+    }) : (tensor<4x256xi32, #linear>) -> tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %idx_172 = tt.expand_dims %value_171 {axis = 1 : i32} : tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>> -> tensor<4x1xi32, #linear>
+    %idx_173 = tt.broadcast %idx_172 : tensor<4x1xi32, #linear> -> tensor<4x256xi32, #linear>
+    %idx_174 = arith.cmpi eq, %key_170, %idx_173 : tensor<4x256xi32, #linear>
+    %idx_175 = arith.select %idx_174, %experts_36, %cst_14 : tensor<4x256xi1, #linear>, tensor<4x256xi32, #linear>
+    %value_176 = "tt.reduce"(%idx_175) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%idx_292: i32, %idx_293: i32):
+      %value_294 = arith.minsi %idx_292, %idx_293 : i32
+      tt.reduce.return %value_294 : i32
+    }) : (tensor<4x256xi32, #linear>) -> tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %idx_177 = arith.cmpi eq, %value_171, %cst_13 : tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %idx_178 = arith.select %idx_177, %cst_12, %value_176 : tensor<4xi1, #ttg.slice<{dim = 1, parent = #linear}>>, tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %picked_ids_179 = arith.cmpi eq, %slots_89, %cst_5 : tensor<1x8xi32, #linear>
+    %picked_ids_180 = tt.expand_dims %idx_178 {axis = 1 : i32} : tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>> -> tensor<4x1xi32, #linear>
+    %picked_ids_181 = tt.broadcast %picked_ids_180 : tensor<4x1xi32, #linear> -> tensor<4x8xi32, #linear>
+    %picked_ids_182 = tt.broadcast %picked_ids_179 : tensor<1x8xi1, #linear> -> tensor<4x8xi1, #linear>
+    %picked_ids_183 = arith.select %picked_ids_182, %picked_ids_181, %picked_ids_162 : tensor<4x8xi1, #linear>, tensor<4x8xi32, #linear>
+    %pick_184 = tt.broadcast %picked_ids_180 : tensor<4x1xi32, #linear> -> tensor<4x256xi32, #linear>
+    %pick_185 = arith.cmpi eq, %experts_36, %pick_184 : tensor<4x256xi32, #linear>
+    %pick_186 = arith.select %pick_185, %logits_73, %cst_11 : tensor<4x256xi1, #linear>, tensor<4x256xf32, #linear>
+    %pick_187 = "tt.reduce"(%pick_186) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%pick_292: f32, %pick_293: f32):
+      %pick_294 = arith.addf %pick_292, %pick_293 : f32
+      tt.reduce.return %pick_294 : f32
+    }) : (tensor<4x256xf32, #linear>) -> tensor<4xf32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %picked_logits_188 = tt.expand_dims %pick_187 {axis = 1 : i32} : tensor<4xf32, #ttg.slice<{dim = 1, parent = #linear}>> -> tensor<4x1xf32, #linear>
+    %picked_logits_189 = tt.broadcast %picked_logits_188 : tensor<4x1xf32, #linear> -> tensor<4x8xf32, #linear>
+    %picked_logits_190 = arith.select %picked_ids_182, %picked_logits_189, %picked_logits_169 : tensor<4x8xi1, #linear>, tensor<4x8xf32, #linear>
+    %key_191 = arith.select %pick_185, %cst_16, %key_170 : tensor<4x256xi1, #linear>, tensor<4x256xi32, #linear>
+    %value_192 = "tt.reduce"(%key_191) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%best: i32, %best_292: i32):
+      %value_293 = arith.maxsi %best, %best_292 : i32
+      tt.reduce.return %value_293 : i32
+    }) : (tensor<4x256xi32, #linear>) -> tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %idx_193 = tt.expand_dims %value_192 {axis = 1 : i32} : tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>> -> tensor<4x1xi32, #linear>
+    %idx_194 = tt.broadcast %idx_193 : tensor<4x1xi32, #linear> -> tensor<4x256xi32, #linear>
+    %idx_195 = arith.cmpi eq, %key_191, %idx_194 : tensor<4x256xi32, #linear>
+    %idx_196 = arith.select %idx_195, %experts_36, %cst_14 : tensor<4x256xi1, #linear>, tensor<4x256xi32, #linear>
+    %value_197 = "tt.reduce"(%idx_196) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%idx_292: i32, %idx_293: i32):
+      %value_294 = arith.minsi %idx_292, %idx_293 : i32
+      tt.reduce.return %value_294 : i32
+    }) : (tensor<4x256xi32, #linear>) -> tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %idx_198 = arith.cmpi eq, %value_192, %cst_13 : tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %idx_199 = arith.select %idx_198, %cst_12, %value_197 : tensor<4xi1, #ttg.slice<{dim = 1, parent = #linear}>>, tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %picked_ids_200 = arith.cmpi eq, %slots_89, %cst_6 : tensor<1x8xi32, #linear>
+    %picked_ids_201 = tt.expand_dims %idx_199 {axis = 1 : i32} : tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>> -> tensor<4x1xi32, #linear>
+    %picked_ids_202 = tt.broadcast %picked_ids_201 : tensor<4x1xi32, #linear> -> tensor<4x8xi32, #linear>
+    %picked_ids_203 = tt.broadcast %picked_ids_200 : tensor<1x8xi1, #linear> -> tensor<4x8xi1, #linear>
+    %picked_ids_204 = arith.select %picked_ids_203, %picked_ids_202, %picked_ids_183 : tensor<4x8xi1, #linear>, tensor<4x8xi32, #linear>
+    %pick_205 = tt.broadcast %picked_ids_201 : tensor<4x1xi32, #linear> -> tensor<4x256xi32, #linear>
+    %pick_206 = arith.cmpi eq, %experts_36, %pick_205 : tensor<4x256xi32, #linear>
+    %pick_207 = arith.select %pick_206, %logits_73, %cst_11 : tensor<4x256xi1, #linear>, tensor<4x256xf32, #linear>
+    %pick_208 = "tt.reduce"(%pick_207) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%pick_292: f32, %pick_293: f32):
+      %pick_294 = arith.addf %pick_292, %pick_293 : f32
+      tt.reduce.return %pick_294 : f32
+    }) : (tensor<4x256xf32, #linear>) -> tensor<4xf32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %picked_logits_209 = tt.expand_dims %pick_208 {axis = 1 : i32} : tensor<4xf32, #ttg.slice<{dim = 1, parent = #linear}>> -> tensor<4x1xf32, #linear>
+    %picked_logits_210 = tt.broadcast %picked_logits_209 : tensor<4x1xf32, #linear> -> tensor<4x8xf32, #linear>
+    %picked_logits_211 = arith.select %picked_ids_203, %picked_logits_210, %picked_logits_190 : tensor<4x8xi1, #linear>, tensor<4x8xf32, #linear>
+    %key_212 = arith.select %pick_206, %cst_16, %key_191 : tensor<4x256xi1, #linear>, tensor<4x256xi32, #linear>
+    %value_213 = "tt.reduce"(%key_212) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%best: i32, %best_292: i32):
+      %value_293 = arith.maxsi %best, %best_292 : i32
+      tt.reduce.return %value_293 : i32
+    }) : (tensor<4x256xi32, #linear>) -> tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %idx_214 = tt.expand_dims %value_213 {axis = 1 : i32} : tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>> -> tensor<4x1xi32, #linear>
+    %idx_215 = tt.broadcast %idx_214 : tensor<4x1xi32, #linear> -> tensor<4x256xi32, #linear>
+    %idx_216 = arith.cmpi eq, %key_212, %idx_215 : tensor<4x256xi32, #linear>
+    %idx_217 = arith.select %idx_216, %experts_36, %cst_14 : tensor<4x256xi1, #linear>, tensor<4x256xi32, #linear>
+    %value_218 = "tt.reduce"(%idx_217) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%idx_292: i32, %idx_293: i32):
+      %value_294 = arith.minsi %idx_292, %idx_293 : i32
+      tt.reduce.return %value_294 : i32
+    }) : (tensor<4x256xi32, #linear>) -> tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %idx_219 = arith.cmpi eq, %value_213, %cst_13 : tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %idx_220 = arith.select %idx_219, %cst_12, %value_218 : tensor<4xi1, #ttg.slice<{dim = 1, parent = #linear}>>, tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %picked_ids_221 = arith.cmpi eq, %slots_89, %cst_7 : tensor<1x8xi32, #linear>
+    %picked_ids_222 = tt.expand_dims %idx_220 {axis = 1 : i32} : tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>> -> tensor<4x1xi32, #linear>
+    %picked_ids_223 = tt.broadcast %picked_ids_222 : tensor<4x1xi32, #linear> -> tensor<4x8xi32, #linear>
+    %picked_ids_224 = tt.broadcast %picked_ids_221 : tensor<1x8xi1, #linear> -> tensor<4x8xi1, #linear>
+    %picked_ids_225 = arith.select %picked_ids_224, %picked_ids_223, %picked_ids_204 : tensor<4x8xi1, #linear>, tensor<4x8xi32, #linear>
+    %pick_226 = tt.broadcast %picked_ids_222 : tensor<4x1xi32, #linear> -> tensor<4x256xi32, #linear>
+    %pick_227 = arith.cmpi eq, %experts_36, %pick_226 : tensor<4x256xi32, #linear>
+    %pick_228 = arith.select %pick_227, %logits_73, %cst_11 : tensor<4x256xi1, #linear>, tensor<4x256xf32, #linear>
+    %pick_229 = "tt.reduce"(%pick_228) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%pick_292: f32, %pick_293: f32):
+      %pick_294 = arith.addf %pick_292, %pick_293 : f32
+      tt.reduce.return %pick_294 : f32
+    }) : (tensor<4x256xf32, #linear>) -> tensor<4xf32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %picked_logits_230 = tt.expand_dims %pick_229 {axis = 1 : i32} : tensor<4xf32, #ttg.slice<{dim = 1, parent = #linear}>> -> tensor<4x1xf32, #linear>
+    %picked_logits_231 = tt.broadcast %picked_logits_230 : tensor<4x1xf32, #linear> -> tensor<4x8xf32, #linear>
+    %picked_logits_232 = arith.select %picked_ids_224, %picked_logits_231, %picked_logits_211 : tensor<4x8xi1, #linear>, tensor<4x8xf32, #linear>
+    %key_233 = arith.select %pick_227, %cst_16, %key_212 : tensor<4x256xi1, #linear>, tensor<4x256xi32, #linear>
+    %value_234 = "tt.reduce"(%key_233) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%best: i32, %best_292: i32):
+      %value_293 = arith.maxsi %best, %best_292 : i32
+      tt.reduce.return %value_293 : i32
+    }) : (tensor<4x256xi32, #linear>) -> tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %idx_235 = tt.expand_dims %value_234 {axis = 1 : i32} : tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>> -> tensor<4x1xi32, #linear>
+    %idx_236 = tt.broadcast %idx_235 : tensor<4x1xi32, #linear> -> tensor<4x256xi32, #linear>
+    %idx_237 = arith.cmpi eq, %key_233, %idx_236 : tensor<4x256xi32, #linear>
+    %idx_238 = arith.select %idx_237, %experts_36, %cst_14 : tensor<4x256xi1, #linear>, tensor<4x256xi32, #linear>
+    %value_239 = "tt.reduce"(%idx_238) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%idx_292: i32, %idx_293: i32):
+      %value_294 = arith.minsi %idx_292, %idx_293 : i32
+      tt.reduce.return %value_294 : i32
+    }) : (tensor<4x256xi32, #linear>) -> tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %idx_240 = arith.cmpi eq, %value_234, %cst_13 : tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %idx_241 = arith.select %idx_240, %cst_12, %value_239 : tensor<4xi1, #ttg.slice<{dim = 1, parent = #linear}>>, tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %picked_ids_242 = arith.cmpi eq, %slots_89, %cst_8 : tensor<1x8xi32, #linear>
+    %picked_ids_243 = tt.expand_dims %idx_241 {axis = 1 : i32} : tensor<4xi32, #ttg.slice<{dim = 1, parent = #linear}>> -> tensor<4x1xi32, #linear>
+    %picked_ids_244 = tt.broadcast %picked_ids_243 : tensor<4x1xi32, #linear> -> tensor<4x8xi32, #linear>
+    %picked_ids_245 = tt.broadcast %picked_ids_242 : tensor<1x8xi1, #linear> -> tensor<4x8xi1, #linear>
+    %picked_ids_246 = arith.select %picked_ids_245, %picked_ids_244, %picked_ids_225 : tensor<4x8xi1, #linear>, tensor<4x8xi32, #linear>
+    %pick_247 = tt.broadcast %picked_ids_243 : tensor<4x1xi32, #linear> -> tensor<4x256xi32, #linear>
+    %pick_248 = arith.cmpi eq, %experts_36, %pick_247 : tensor<4x256xi32, #linear>
+    %pick_249 = arith.select %pick_248, %logits_73, %cst_11 : tensor<4x256xi1, #linear>, tensor<4x256xf32, #linear>
+    %pick_250 = "tt.reduce"(%pick_249) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%pick_292: f32, %pick_293: f32):
+      %pick_294 = arith.addf %pick_292, %pick_293 : f32
+      tt.reduce.return %pick_294 : f32
+    }) : (tensor<4x256xf32, #linear>) -> tensor<4xf32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %picked_logits_251 = tt.expand_dims %pick_250 {axis = 1 : i32} : tensor<4xf32, #ttg.slice<{dim = 1, parent = #linear}>> -> tensor<4x1xf32, #linear>
+    %picked_logits_252 = tt.broadcast %picked_logits_251 : tensor<4x1xf32, #linear> -> tensor<4x8xf32, #linear>
+    %picked_logits_253 = arith.select %picked_ids_245, %picked_logits_252, %picked_logits_232 : tensor<4x8xi1, #linear>, tensor<4x8xf32, #linear>
+    %found_254 = arith.cmpi sge, %picked_ids_246, %found : tensor<4x8xi32, #linear>
+    %picked = tt.splat %multiplier : f32 -> tensor<4x8xf32, #linear>
+    %picked_255 = arith.mulf %picked_logits_253, %picked : tensor<4x8xf32, #linear>
+    %picked_256 = arith.negf %picked_255 : tensor<4x8xf32, #linear>
+    %picked_257 = math.exp %picked_256 : tensor<4x8xf32, #linear>
+    %picked_258 = arith.addf %picked_257, %cst : tensor<4x8xf32, #linear>
+    %picked_259 = arith.divf %cst, %picked_258 : tensor<4x8xf32, #linear>
+    %picked_260 = arith.select %found_254, %picked_259, %cst_0 : tensor<4x8xi1, #linear>, tensor<4x8xf32, #linear>
+    %score_sum_261 = arith.select %picked_ids_100, %picked_260, %cst_0 : tensor<4x8xi1, #linear>, tensor<4x8xf32, #linear>
+    %score_sum_262 = "tt.reduce"(%score_sum_261) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%score_sum_292: f32, %score_sum_293: f32):
+      %score_sum_294 = arith.addf %score_sum_292, %score_sum_293 : f32
+      tt.reduce.return %score_sum_294 : f32
+    }) : (tensor<4x8xf32, #linear>) -> tensor<4xf32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %score_sum_263 = arith.addf %score_sum_262, %score_sum : tensor<4xf32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %score_sum_264 = arith.select %picked_ids_119, %picked_260, %cst_0 : tensor<4x8xi1, #linear>, tensor<4x8xf32, #linear>
+    %score_sum_265 = "tt.reduce"(%score_sum_264) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%score_sum_292: f32, %score_sum_293: f32):
+      %score_sum_294 = arith.addf %score_sum_292, %score_sum_293 : f32
+      tt.reduce.return %score_sum_294 : f32
+    }) : (tensor<4x8xf32, #linear>) -> tensor<4xf32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %score_sum_266 = arith.addf %score_sum_263, %score_sum_265 : tensor<4xf32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %score_sum_267 = arith.select %picked_ids_140, %picked_260, %cst_0 : tensor<4x8xi1, #linear>, tensor<4x8xf32, #linear>
+    %score_sum_268 = "tt.reduce"(%score_sum_267) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%score_sum_292: f32, %score_sum_293: f32):
+      %score_sum_294 = arith.addf %score_sum_292, %score_sum_293 : f32
+      tt.reduce.return %score_sum_294 : f32
+    }) : (tensor<4x8xf32, #linear>) -> tensor<4xf32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %score_sum_269 = arith.addf %score_sum_266, %score_sum_268 : tensor<4xf32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %score_sum_270 = arith.select %picked_ids_161, %picked_260, %cst_0 : tensor<4x8xi1, #linear>, tensor<4x8xf32, #linear>
+    %score_sum_271 = "tt.reduce"(%score_sum_270) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%score_sum_292: f32, %score_sum_293: f32):
+      %score_sum_294 = arith.addf %score_sum_292, %score_sum_293 : f32
+      tt.reduce.return %score_sum_294 : f32
+    }) : (tensor<4x8xf32, #linear>) -> tensor<4xf32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %score_sum_272 = arith.addf %score_sum_269, %score_sum_271 : tensor<4xf32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %score_sum_273 = arith.select %picked_ids_182, %picked_260, %cst_0 : tensor<4x8xi1, #linear>, tensor<4x8xf32, #linear>
+    %score_sum_274 = "tt.reduce"(%score_sum_273) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%score_sum_292: f32, %score_sum_293: f32):
+      %score_sum_294 = arith.addf %score_sum_292, %score_sum_293 : f32
+      tt.reduce.return %score_sum_294 : f32
+    }) : (tensor<4x8xf32, #linear>) -> tensor<4xf32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %score_sum_275 = arith.addf %score_sum_272, %score_sum_274 : tensor<4xf32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %score_sum_276 = arith.select %picked_ids_203, %picked_260, %cst_0 : tensor<4x8xi1, #linear>, tensor<4x8xf32, #linear>
+    %score_sum_277 = "tt.reduce"(%score_sum_276) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%score_sum_292: f32, %score_sum_293: f32):
+      %score_sum_294 = arith.addf %score_sum_292, %score_sum_293 : f32
+      tt.reduce.return %score_sum_294 : f32
+    }) : (tensor<4x8xf32, #linear>) -> tensor<4xf32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %score_sum_278 = arith.addf %score_sum_275, %score_sum_277 : tensor<4xf32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %score_sum_279 = arith.select %picked_ids_224, %picked_260, %cst_0 : tensor<4x8xi1, #linear>, tensor<4x8xf32, #linear>
+    %score_sum_280 = "tt.reduce"(%score_sum_279) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%score_sum_292: f32, %score_sum_293: f32):
+      %score_sum_294 = arith.addf %score_sum_292, %score_sum_293 : f32
+      tt.reduce.return %score_sum_294 : f32
+    }) : (tensor<4x8xf32, #linear>) -> tensor<4xf32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %score_sum_281 = arith.addf %score_sum_278, %score_sum_280 : tensor<4xf32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %score_sum_282 = arith.select %picked_ids_245, %picked_260, %cst_0 : tensor<4x8xi1, #linear>, tensor<4x8xf32, #linear>
+    %score_sum_283 = "tt.reduce"(%score_sum_282) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%score_sum_292: f32, %score_sum_293: f32):
+      %score_sum_294 = arith.addf %score_sum_292, %score_sum_293 : f32
+      tt.reduce.return %score_sum_294 : f32
+    }) : (tensor<4x8xf32, #linear>) -> tensor<4xf32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %score_sum_284 = arith.addf %score_sum_281, %score_sum_283 : tensor<4xf32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %inv = tt.splat %eps : f32 -> tensor<4xf32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %inv_285 = arith.addf %score_sum_284, %inv : tensor<4xf32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %inv_286 = tt.splat %route_scale : f32 -> tensor<4xf32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %inv_287 = arith.divf %inv_286, %inv_285 : tensor<4xf32, #ttg.slice<{dim = 1, parent = #linear}>>
+    %0 = tt.expand_dims %inv_287 {axis = 1 : i32} : tensor<4xf32, #ttg.slice<{dim = 1, parent = #linear}>> -> tensor<4x1xf32, #linear>
+    %1 = tt.broadcast %0 : tensor<4x1xf32, #linear> -> tensor<4x8xf32, #linear>
+    %2 = arith.mulf %picked_260, %1 : tensor<4x8xf32, #linear>
+    %3 = arith.select %found_254, %2, %cst_0 : tensor<4x8xi1, #linear>, tensor<4x8xf32, #linear>
+    %out_mask_288 = arith.cmpi slt, %slots_90, %out_mask : tensor<1x8xi32, #blocked1>
+    %out_mask_289 = tt.broadcast %mask_29 : tensor<4x1xi1, #blocked1> -> tensor<4x8xi1, #blocked1>
+    %out_mask_290 = tt.broadcast %out_mask_288 : tensor<1x8xi1, #blocked1> -> tensor<4x8xi1, #blocked1>
+    %out_mask_291 = arith.andi %out_mask_289, %out_mask_290 : tensor<4x8xi1, #blocked1>
+    %4 = arith.extsi %stride_wm : i32 to i64
+    %5 = tt.expand_dims %rows64_28 {axis = 1 : i32} : tensor<4xi64, #ttg.slice<{dim = 1, parent = #blocked1}>> -> tensor<4x1xi64, #blocked1>
+    %6 = tt.splat %4 : i64 -> tensor<4x1xi64, #blocked1>
+    %7 = arith.muli %5, %6 : tensor<4x1xi64, #blocked1>
+    %8 = arith.trunci %7 : tensor<4x1xi64, #blocked1> to tensor<4x1xi32, #blocked1>
+    %9 = tt.broadcast %8 : tensor<4x1xi32, #blocked1> -> tensor<4x8xi32, #blocked1>
+    %10 = tt.broadcast %slots_90 : tensor<1x8xi32, #blocked1> -> tensor<4x8xi32, #blocked1>
+    %11 = arith.addi %9, %10 : tensor<4x8xi32, #blocked1>
+    %12 = ttg.convert_layout %3 : tensor<4x8xf32, #linear> -> tensor<4x8xf32, #blocked1>
+    amdg.buffer_store %12, %weights_ptr[%11], %out_mask_291 : !tt.ptr<f32> -> tensor<4x8xf32, #blocked1>
+    %13 = arith.extsi %stride_im : i32 to i64
+    %14 = tt.splat %13 : i64 -> tensor<4x1xi64, #blocked1>
+    %15 = arith.muli %5, %14 : tensor<4x1xi64, #blocked1>
+    %16 = arith.trunci %15 : tensor<4x1xi64, #blocked1> to tensor<4x1xi32, #blocked1>
+    %17 = tt.broadcast %16 : tensor<4x1xi32, #blocked1> -> tensor<4x8xi32, #blocked1>
+    %18 = arith.addi %17, %10 : tensor<4x8xi32, #blocked1>
+    %19 = ttg.convert_layout %picked_ids_246 : tensor<4x8xi32, #linear> -> tensor<4x8xi32, #blocked1>
+    amdg.buffer_store %19, %ids_ptr[%18], %out_mask_291 : !tt.ptr<i32> -> tensor<4x8xi32, #blocked1>
+    tt.return
+  }
+}

@@ -9,13 +9,10 @@
 module attributes {tlx.has_explicit_local_mem_access = true, triton.skip_generic_pipeline, ttg.amd.sched_group_barrier.enabled, ttg.amd.sched_group_barrier.required_region_count = 0 : i32, "ttg.cluster-dim-x" = 1 : i32, "ttg.cluster-dim-y" = 1 : i32, "ttg.cluster-dim-z" = 1 : i32, "ttg.num-ctas" = 1 : i32, "ttg.num-warps" = 8 : i32, ttg.target = "hip:gfx950", "ttg.threads-per-warp" = 64 : i32} {
   tt.func public @a16w16_8wave(%a_ptr: !tt.ptr<bf16> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %b_ptr: !tt.ptr<bf16> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %bias_ptr: !tt.ptr<bf16> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %c_ptr: !tt.ptr<bf16> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %workspace_ptr: !tt.ptr<f32> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %row_sum_ptr: !tt.ptr<bf16> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %row_sum_sq_ptr: !tt.ptr<bf16> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %M: i32 {tt.divisibility = 16 : i32}, %N: i32, %K: i32 {tt.divisibility = 16 : i32}, %KS: i32 {tt.divisibility = 16 : i32}, %stride_am: i32 {tt.divisibility = 16 : i32}, %stride_bn: i32 {tt.divisibility = 16 : i32}, %stride_bias_m: i32 {tt.divisibility = 16 : i32}, %stride_bias_n: i32 {tt.divisibility = 16 : i32}, %stride_cm: i32) attributes {noinline = false} {
     %cst = arith.constant dense<64> : tensor<64x128xi32, #linear>
-    %cst_0 = arith.constant dense<0.000000e+00> : tensor<128x128xf32, #mma>
-    %c255_i32 = arith.constant 255 : i32
-    %pids_per_xcd = arith.constant 3 : i32
-    %c2_i32 = arith.constant 2 : i32
-    %c64_i32 = arith.constant 64 : i32
-    %cst_1 = arith.constant dense<0.000000e+00> : tensor<128x64xbf16, #blocked>
-    %cst_2 = arith.constant dense<0.000000e+00> : tensor<64x128xbf16, #blocked1>
+    %cst_0 = arith.constant dense<0.000000e+00> : tensor<128x64xbf16, #linear1>
+    %cst_1 = arith.constant dense<0.000000e+00> : tensor<64x128xbf16, #linear>
+    %cst_2 = arith.constant dense<0.000000e+00> : tensor<128x64xbf16, #blocked>
+    %cst_3 = arith.constant dense<0.000000e+00> : tensor<64x128xbf16, #blocked1>
     %c4_i32 = arith.constant 4 : i32
     %c1_i32 = arith.constant 1 : i32
     %c0_i32 = arith.constant 0 : i32
@@ -23,14 +20,17 @@ module attributes {tlx.has_explicit_local_mem_access = true, triton.skip_generic
     %true = arith.constant true
     %c256_i32 = arith.constant 256 : i32
     %c128_i32 = arith.constant 128 : i32
-    %cst_3 = arith.constant dense<128> : tensor<128xi32, #ttg.slice<{dim = 0, parent = #blocked1}>>
-    %cst_4 = arith.constant dense<0.000000e+00> : tensor<128x64xbf16, #linear1>
-    %cst_5 = arith.constant dense<0.000000e+00> : tensor<64x128xbf16, #linear>
-    %a_bot_mask = arith.constant dense<128> : tensor<128x1xi32, #linear1>
+    %cst_4 = arith.constant dense<128> : tensor<128xi32, #ttg.slice<{dim = 0, parent = #linear}>>
+    %cst_5 = arith.constant dense<128> : tensor<128xi32, #ttg.slice<{dim = 0, parent = #blocked1}>>
+    %cst_6 = arith.constant dense<128> : tensor<128xi32, #ttg.slice<{dim = 0, parent = #mma}>>
+    %cst_7 = arith.constant dense<0> : tensor<128xi32, #ttg.slice<{dim = 0, parent = #linear}>>
+    %c64_i32 = arith.constant 64 : i32
     %a_k_mask = arith.constant dense<64> : tensor<1x64xi32, #linear1>
-    %cst_6 = arith.constant dense<0> : tensor<128xi32, #ttg.slice<{dim = 0, parent = #linear}>>
-    %cst_7 = arith.constant dense<128> : tensor<128xi32, #ttg.slice<{dim = 0, parent = #linear}>>
-    %cst_8 = arith.constant dense<128> : tensor<128xi32, #ttg.slice<{dim = 0, parent = #mma}>>
+    %a_bot_mask = arith.constant dense<128> : tensor<128x1xi32, #linear1>
+    %c2_i32 = arith.constant 2 : i32
+    %pids_per_xcd = arith.constant 3 : i32
+    %c255_i32 = arith.constant 255 : i32
+    %cst_8 = arith.constant dense<0.000000e+00> : tensor<128x128xf32, #mma>
     %linear_pid = tt.get_program_id x : i32
     %grid_mn = tt.get_num_programs x : i32
     %grid_mn_9 = arith.divsi %grid_mn, %c4_i32 : i32
@@ -103,14 +103,14 @@ module attributes {tlx.has_explicit_local_mem_access = true, triton.skip_generic
     %offs_bn_36 = arith.addi %offs_bn_33, %offs_am_24 : tensor<128xi32, #ttg.slice<{dim = 0, parent = #mma}>>
     %offs_k = tt.make_range {end = 64 : i32, start = 0 : i32} : tensor<64xi32, #ttg.slice<{dim = 0, parent = #blocked}>>
     %offs_k_37 = tt.make_range {end = 64 : i32, start = 0 : i32} : tensor<64xi32, #ttg.slice<{dim = 1, parent = #blocked1}>>
-    %offs_bn_right = arith.addi %offs_bn_34, %cst_7 : tensor<128xi32, #ttg.slice<{dim = 0, parent = #linear}>>
-    %offs_bn_right_38 = arith.addi %offs_bn_35, %cst_3 : tensor<128xi32, #ttg.slice<{dim = 0, parent = #blocked1}>>
-    %offs_bn_right_39 = arith.addi %offs_bn_36, %cst_8 : tensor<128xi32, #ttg.slice<{dim = 0, parent = #mma}>>
+    %offs_bn_right = arith.addi %offs_bn_34, %cst_4 : tensor<128xi32, #ttg.slice<{dim = 0, parent = #linear}>>
+    %offs_bn_right_38 = arith.addi %offs_bn_35, %cst_5 : tensor<128xi32, #ttg.slice<{dim = 0, parent = #blocked1}>>
+    %offs_bn_right_39 = arith.addi %offs_bn_36, %cst_6 : tensor<128xi32, #ttg.slice<{dim = 0, parent = #mma}>>
     %global_bn = tt.splat %N : i32 -> tensor<128xi32, #ttg.slice<{dim = 0, parent = #linear}>>
     %global_bn_40 = arith.cmpi slt, %offs_bn_34, %global_bn : tensor<128xi32, #ttg.slice<{dim = 0, parent = #linear}>>
-    %global_bn_41 = arith.select %global_bn_40, %offs_bn_34, %cst_6 : tensor<128xi1, #ttg.slice<{dim = 0, parent = #linear}>>, tensor<128xi32, #ttg.slice<{dim = 0, parent = #linear}>>
+    %global_bn_41 = arith.select %global_bn_40, %offs_bn_34, %cst_7 : tensor<128xi1, #ttg.slice<{dim = 0, parent = #linear}>>, tensor<128xi32, #ttg.slice<{dim = 0, parent = #linear}>>
     %global_bn_right = arith.cmpi slt, %offs_bn_right, %global_bn : tensor<128xi32, #ttg.slice<{dim = 0, parent = #linear}>>
-    %global_bn_right_42 = arith.select %global_bn_right, %offs_bn_right, %cst_6 : tensor<128xi1, #ttg.slice<{dim = 0, parent = #linear}>>, tensor<128xi32, #ttg.slice<{dim = 0, parent = #linear}>>
+    %global_bn_right_42 = arith.select %global_bn_right, %offs_bn_right, %cst_7 : tensor<128xi1, #ttg.slice<{dim = 0, parent = #linear}>>, tensor<128xi32, #ttg.slice<{dim = 0, parent = #linear}>>
     %a_row_off = tt.expand_dims %offs_am_28 {axis = 1 : i32} : tensor<128xi32, #ttg.slice<{dim = 1, parent = #linear1}>> -> tensor<128x1xi32, #linear1>
     %a_row_off_43 = tt.expand_dims %offs_am_29 {axis = 1 : i32} : tensor<128xi32, #ttg.slice<{dim = 1, parent = #blocked}>> -> tensor<128x1xi32, #blocked>
     %a_row_off_44 = tt.expand_dims %offs_am_30 {axis = 1 : i32} : tensor<128xi32, #ttg.slice<{dim = 1, parent = #mma}>> -> tensor<128x1xi32, #mma>
@@ -165,7 +165,7 @@ module attributes {tlx.has_explicit_local_mem_access = true, triton.skip_generic
     %11 = arith.addi %6, %10 : tensor<64x128xi32, #linear>
     %12 = arith.addi %11, %4 : tensor<64x128xi32, #linear>
     %13 = ttg.memdesc_index %smem_b_left[%c0_i32] : !ttg.memdesc<2x64x128xbf16, #shared1, #smem, mutable> -> !ttg.memdesc<64x128xbf16, #shared1, #smem, mutable>
-    %14 = amdg.buffer_load_to_local %b_ptr[%12] mask = %b_left_mask_68 other = %cst_5 into %13 {contiguity = 8 : i32, ttg.amd.sched_group_barrier.machine_count = 2 : i32, ttg.amd.sched_group_barrier.machine_mask = 2048 : i32, ttg.amd.sched_group_barrier.mfma_cover = 4 : i32} : !tt.ptr<bf16>[tensor<64x128xi32, #linear>] tensor<64x128xbf16, #linear> -> <64x128xbf16, #shared1, #smem, mutable>
+    %14 = amdg.buffer_load_to_local %b_ptr[%12] mask = %b_left_mask_68 other = %cst_1 into %13 {contiguity = 8 : i32, ttg.amd.sched_group_barrier.machine_count = 2 : i32, ttg.amd.sched_group_barrier.machine_mask = 2048 : i32, ttg.amd.sched_group_barrier.mfma_cover = 4 : i32} : !tt.ptr<bf16>[tensor<64x128xi32, #linear>] tensor<64x128xbf16, #linear> -> <64x128xbf16, #shared1, #smem, mutable>
     %15 = ttg.async_commit_group
     %16 = arith.muli %offs_am, %stride_am : i32
     %17 = tt.splat %split_start : i32 -> tensor<128x64xi32, #linear1>
@@ -179,13 +179,13 @@ module attributes {tlx.has_explicit_local_mem_access = true, triton.skip_generic
     %25 = tt.splat %16 : i32 -> tensor<128x64xi32, #linear1>
     %26 = arith.addi %25, %24 : tensor<128x64xi32, #linear1>
     %27 = ttg.memdesc_index %smem_a_top[%c0_i32] : !ttg.memdesc<2x128x64xbf16, #shared, #smem, mutable> -> !ttg.memdesc<128x64xbf16, #shared, #smem, mutable>
-    %28 = amdg.buffer_load_to_local %a_ptr[%26] mask = %a_top_mask_55 other = %cst_4 into %27 {contiguity = 8 : i32, ttg.amd.sched_group_barrier.machine_count = 2 : i32, ttg.amd.sched_group_barrier.machine_mask = 2048 : i32, ttg.amd.sched_group_barrier.mfma_cover = 4 : i32} : !tt.ptr<bf16>[tensor<128x64xi32, #linear1>] tensor<128x64xbf16, #linear1> -> <128x64xbf16, #shared, #smem, mutable>
+    %28 = amdg.buffer_load_to_local %a_ptr[%26] mask = %a_top_mask_55 other = %cst_0 into %27 {contiguity = 8 : i32, ttg.amd.sched_group_barrier.machine_count = 2 : i32, ttg.amd.sched_group_barrier.machine_mask = 2048 : i32, ttg.amd.sched_group_barrier.mfma_cover = 4 : i32} : !tt.ptr<bf16>[tensor<128x64xi32, #linear1>] tensor<128x64xbf16, #linear1> -> <128x64xbf16, #shared, #smem, mutable>
     %29 = ttg.async_commit_group
     %30 = arith.addi %16, %a_bot_off : i32
     %31 = tt.splat %30 : i32 -> tensor<128x64xi32, #linear1>
     %32 = arith.addi %31, %24 : tensor<128x64xi32, #linear1>
     %33 = ttg.memdesc_index %smem_a_bot[%c0_i32] : !ttg.memdesc<2x128x64xbf16, #shared, #smem, mutable> -> !ttg.memdesc<128x64xbf16, #shared, #smem, mutable>
-    %34 = amdg.buffer_load_to_local %a_ptr[%32] mask = %a_bot_mask_59 other = %cst_4 into %33 {contiguity = 8 : i32, ttg.amd.sched_group_barrier.machine_count = 2 : i32, ttg.amd.sched_group_barrier.machine_mask = 2048 : i32, ttg.amd.sched_group_barrier.mfma_cover = 4 : i32} : !tt.ptr<bf16>[tensor<128x64xi32, #linear1>] tensor<128x64xbf16, #linear1> -> <128x64xbf16, #shared, #smem, mutable>
+    %34 = amdg.buffer_load_to_local %a_ptr[%32] mask = %a_bot_mask_59 other = %cst_0 into %33 {contiguity = 8 : i32, ttg.amd.sched_group_barrier.machine_count = 2 : i32, ttg.amd.sched_group_barrier.machine_mask = 2048 : i32, ttg.amd.sched_group_barrier.mfma_cover = 4 : i32} : !tt.ptr<bf16>[tensor<128x64xi32, #linear1>] tensor<128x64xbf16, #linear1> -> <128x64xbf16, #shared, #smem, mutable>
     %35 = ttg.async_commit_group
     %36 = tt.expand_dims %global_bn_right_42 {axis = 0 : i32} : tensor<128xi32, #ttg.slice<{dim = 0, parent = #linear}>> -> tensor<1x128xi32, #linear>
     %37 = arith.muli %36, %8 : tensor<1x128xi32, #linear>
@@ -193,34 +193,34 @@ module attributes {tlx.has_explicit_local_mem_access = true, triton.skip_generic
     %39 = arith.addi %6, %38 : tensor<64x128xi32, #linear>
     %40 = arith.addi %39, %4 : tensor<64x128xi32, #linear>
     %41 = ttg.memdesc_index %smem_b_right[%c0_i32] : !ttg.memdesc<2x64x128xbf16, #shared1, #smem, mutable> -> !ttg.memdesc<64x128xbf16, #shared1, #smem, mutable>
-    %42 = amdg.buffer_load_to_local %b_ptr[%40] mask = %b_right_mask_75 other = %cst_5 into %41 {contiguity = 8 : i32, ttg.amd.sched_group_barrier.machine_count = 2 : i32, ttg.amd.sched_group_barrier.machine_mask = 2048 : i32, ttg.amd.sched_group_barrier.mfma_cover = 4 : i32} : !tt.ptr<bf16>[tensor<64x128xi32, #linear>] tensor<64x128xbf16, #linear> -> <64x128xbf16, #shared1, #smem, mutable>
+    %42 = amdg.buffer_load_to_local %b_ptr[%40] mask = %b_right_mask_75 other = %cst_1 into %41 {contiguity = 8 : i32, ttg.amd.sched_group_barrier.machine_count = 2 : i32, ttg.amd.sched_group_barrier.machine_mask = 2048 : i32, ttg.amd.sched_group_barrier.mfma_cover = 4 : i32} : !tt.ptr<bf16>[tensor<64x128xi32, #linear>] tensor<64x128xbf16, #linear> -> <64x128xbf16, #shared1, #smem, mutable>
     %43 = ttg.async_commit_group
     %44 = arith.addi %12, %cst : tensor<64x128xi32, #linear>
     %45 = ttg.memdesc_index %smem_b_left[%c1_i32] : !ttg.memdesc<2x64x128xbf16, #shared1, #smem, mutable> -> !ttg.memdesc<64x128xbf16, #shared1, #smem, mutable>
-    %46 = amdg.buffer_load_to_local %b_ptr[%44] mask = %b_left_mask_68 other = %cst_5 into %45 {contiguity = 8 : i32, ttg.amd.sched_group_barrier.machine_count = 2 : i32, ttg.amd.sched_group_barrier.machine_mask = 2048 : i32, ttg.amd.sched_group_barrier.mfma_cover = 4 : i32} : !tt.ptr<bf16>[tensor<64x128xi32, #linear>] tensor<64x128xbf16, #linear> -> <64x128xbf16, #shared1, #smem, mutable>
+    %46 = amdg.buffer_load_to_local %b_ptr[%44] mask = %b_left_mask_68 other = %cst_1 into %45 {contiguity = 8 : i32, ttg.amd.sched_group_barrier.machine_count = 2 : i32, ttg.amd.sched_group_barrier.machine_mask = 2048 : i32, ttg.amd.sched_group_barrier.mfma_cover = 4 : i32} : !tt.ptr<bf16>[tensor<64x128xi32, #linear>] tensor<64x128xbf16, #linear> -> <64x128xbf16, #shared1, #smem, mutable>
     %47 = ttg.async_commit_group
     %48 = arith.addi %16, %c64_i32 : i32
     %49 = tt.splat %48 : i32 -> tensor<128x64xi32, #linear1>
     %50 = arith.addi %49, %24 : tensor<128x64xi32, #linear1>
     %51 = ttg.memdesc_index %smem_a_top[%c1_i32] : !ttg.memdesc<2x128x64xbf16, #shared, #smem, mutable> -> !ttg.memdesc<128x64xbf16, #shared, #smem, mutable>
-    %52 = amdg.buffer_load_to_local %a_ptr[%50] mask = %a_top_mask_55 other = %cst_4 into %51 {contiguity = 8 : i32, ttg.amd.sched_group_barrier.machine_count = 2 : i32, ttg.amd.sched_group_barrier.machine_mask = 2048 : i32, ttg.amd.sched_group_barrier.mfma_cover = 4 : i32} : !tt.ptr<bf16>[tensor<128x64xi32, #linear1>] tensor<128x64xbf16, #linear1> -> <128x64xbf16, #shared, #smem, mutable>
+    %52 = amdg.buffer_load_to_local %a_ptr[%50] mask = %a_top_mask_55 other = %cst_0 into %51 {contiguity = 8 : i32, ttg.amd.sched_group_barrier.machine_count = 2 : i32, ttg.amd.sched_group_barrier.machine_mask = 2048 : i32, ttg.amd.sched_group_barrier.mfma_cover = 4 : i32} : !tt.ptr<bf16>[tensor<128x64xi32, #linear1>] tensor<128x64xbf16, #linear1> -> <128x64xbf16, #shared, #smem, mutable>
     %53 = ttg.async_commit_group
     %54 = arith.addi %30, %c64_i32 : i32
     %55 = tt.splat %54 : i32 -> tensor<128x64xi32, #linear1>
     %56 = arith.addi %55, %24 : tensor<128x64xi32, #linear1>
     %57 = ttg.memdesc_index %smem_a_bot[%c1_i32] : !ttg.memdesc<2x128x64xbf16, #shared, #smem, mutable> -> !ttg.memdesc<128x64xbf16, #shared, #smem, mutable>
-    %58 = amdg.buffer_load_to_local %a_ptr[%56] mask = %a_bot_mask_59 other = %cst_4 into %57 {contiguity = 8 : i32, ttg.amd.sched_group_barrier.machine_count = 2 : i32, ttg.amd.sched_group_barrier.machine_mask = 2048 : i32, ttg.amd.sched_group_barrier.mfma_cover = 4 : i32} : !tt.ptr<bf16>[tensor<128x64xi32, #linear1>] tensor<128x64xbf16, #linear1> -> <128x64xbf16, #shared, #smem, mutable>
+    %58 = amdg.buffer_load_to_local %a_ptr[%56] mask = %a_bot_mask_59 other = %cst_0 into %57 {contiguity = 8 : i32, ttg.amd.sched_group_barrier.machine_count = 2 : i32, ttg.amd.sched_group_barrier.machine_mask = 2048 : i32, ttg.amd.sched_group_barrier.mfma_cover = 4 : i32} : !tt.ptr<bf16>[tensor<128x64xi32, #linear1>] tensor<128x64xbf16, #linear1> -> <128x64xbf16, #shared, #smem, mutable>
     %59 = ttg.async_commit_group
     %60 = arith.addi %40, %cst : tensor<64x128xi32, #linear>
     %61 = ttg.memdesc_index %smem_b_right[%c1_i32] : !ttg.memdesc<2x64x128xbf16, #shared1, #smem, mutable> -> !ttg.memdesc<64x128xbf16, #shared1, #smem, mutable>
-    %62 = amdg.buffer_load_to_local %b_ptr[%60] mask = %b_right_mask_75 other = %cst_5 into %61 {contiguity = 8 : i32, ttg.amd.sched_group_barrier.machine_count = 2 : i32, ttg.amd.sched_group_barrier.machine_mask = 2048 : i32, ttg.amd.sched_group_barrier.mfma_cover = 4 : i32} : !tt.ptr<bf16>[tensor<64x128xi32, #linear>] tensor<64x128xbf16, #linear> -> <64x128xbf16, #shared1, #smem, mutable>
+    %62 = amdg.buffer_load_to_local %b_ptr[%60] mask = %b_right_mask_75 other = %cst_1 into %61 {contiguity = 8 : i32, ttg.amd.sched_group_barrier.machine_count = 2 : i32, ttg.amd.sched_group_barrier.machine_mask = 2048 : i32, ttg.amd.sched_group_barrier.mfma_cover = 4 : i32} : !tt.ptr<bf16>[tensor<64x128xi32, #linear>] tensor<64x128xbf16, #linear> -> <64x128xbf16, #shared1, #smem, mutable>
     %63 = ttg.async_commit_group
     %ka = arith.addi %split_start, %c128_i32 : i32
     %64 = ttg.async_wait {num = 6 : i32}
     %b_left = ttg.local_load %13 {ttg.amd.sched_group_barrier.machine_count = 8 : i32, ttg.amd.sched_group_barrier.machine_mask = 256 : i32, ttg.amdg.syncedViaAsyncWait = true} : !ttg.memdesc<64x128xbf16, #shared1, #smem, mutable> -> tensor<64x128xbf16, #ttg.dot_op<{opIdx = 1, parent = #mma, kWidth = 8}>>
     %a_top = ttg.local_load %27 {ttg.amd.sched_group_barrier.machine_count = 8 : i32, ttg.amd.sched_group_barrier.machine_mask = 256 : i32, ttg.amdg.syncedViaAsyncWait = true} : !ttg.memdesc<128x64xbf16, #shared, #smem, mutable> -> tensor<128x64xbf16, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 8}>>
     %65 = arith.subi %n_pipe_77, %c2_i32 : i32
-    %a_top_78:8 = scf.for %k = %c0_i32 to %65 step %c2_i32 iter_args(%ka_97 = %ka, %kb = %ka, %acc_tl_98 = %cst_0, %acc_bl_99 = %cst_0, %acc_tr_100 = %cst_0, %acc_br_101 = %cst_0, %b_left_102 = %b_left, %a_top_103 = %a_top) -> (i32, i32, tensor<128x128xf32, #mma>, tensor<128x128xf32, #mma>, tensor<128x128xf32, #mma>, tensor<128x128xf32, #mma>, tensor<64x128xbf16, #ttg.dot_op<{opIdx = 1, parent = #mma, kWidth = 8}>>, tensor<128x64xbf16, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 8}>>)  : i32 {
+    %a_top_78:8 = scf.for %k = %c0_i32 to %65 step %c2_i32 iter_args(%ka_97 = %ka, %kb = %ka, %acc_tl_98 = %cst_8, %acc_bl_99 = %cst_8, %acc_tr_100 = %cst_8, %acc_br_101 = %cst_8, %b_left_102 = %b_left, %a_top_103 = %a_top) -> (i32, i32, tensor<128x128xf32, #mma>, tensor<128x128xf32, #mma>, tensor<128x128xf32, #mma>, tensor<128x128xf32, #mma>, tensor<64x128xbf16, #ttg.dot_op<{opIdx = 1, parent = #mma, kWidth = 8}>>, tensor<128x64xbf16, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 8}>>)  : i32 {
       %105 = ttg.async_wait {num = 5 : i32}
       %106 = scf.execute_region -> tensor<128x128xf32, #mma> no_inline {
         %acc_tl_104 = tt.dot %a_top_103, %b_left_102, %acc_tl_98 {ttg.amd.sched_group_barrier.machine_count = 16 : i32, ttg.amd.sched_group_barrier.machine_mask = 8 : i32} : tensor<128x64xbf16, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 8}>> * tensor<64x128xbf16, #ttg.dot_op<{opIdx = 1, parent = #mma, kWidth = 8}>> -> tensor<128x128xf32, #mma>
@@ -230,7 +230,7 @@ module attributes {tlx.has_explicit_local_mem_access = true, triton.skip_generic
         %a_bot_104 = ttg.local_load %33 {ttg.amd.sched_group_barrier.machine_count = 8 : i32, ttg.amd.sched_group_barrier.machine_mask = 256 : i32, ttg.amdg.syncedViaAsyncWait = true} : !ttg.memdesc<128x64xbf16, #shared, #smem, mutable> -> tensor<128x64xbf16, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 8}>>
         %129 = tt.splat %kb : i32 -> tensor<64x128xi32, #linear>
         %130 = arith.addi %11, %129 : tensor<64x128xi32, #linear>
-        %131 = amdg.buffer_load_to_local %b_ptr[%130] mask = %b_left_mask_68 other = %cst_5 into %13 {contiguity = 8 : i32, ttg.amd.sched_group_barrier.machine_count = 2 : i32, ttg.amd.sched_group_barrier.machine_mask = 2048 : i32, ttg.amd.sched_group_barrier.mfma_cover = 4 : i32} : !tt.ptr<bf16>[tensor<64x128xi32, #linear>] tensor<64x128xbf16, #linear> -> <64x128xbf16, #shared1, #smem, mutable>
+        %131 = amdg.buffer_load_to_local %b_ptr[%130] mask = %b_left_mask_68 other = %cst_1 into %13 {contiguity = 8 : i32, ttg.amd.sched_group_barrier.machine_count = 2 : i32, ttg.amd.sched_group_barrier.machine_mask = 2048 : i32, ttg.amd.sched_group_barrier.mfma_cover = 4 : i32} : !tt.ptr<bf16>[tensor<64x128xi32, #linear>] tensor<64x128xbf16, #linear> -> <64x128xbf16, #shared1, #smem, mutable>
         %132 = ttg.async_commit_group
         scf.yield %a_bot_104, %129, %130 : tensor<128x64xbf16, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 8}>>, tensor<64x128xi32, #linear>, tensor<64x128xi32, #linear>
       } {triton.warp_pipeline.allow_memory_reorder, triton.warp_pipeline.priority = 1 : i32, triton.warp_pipeline.stage = "mem"}
@@ -244,7 +244,7 @@ module attributes {tlx.has_explicit_local_mem_access = true, triton.skip_generic
         %129 = tt.splat %ka_97 : i32 -> tensor<128x64xi32, #linear1>
         %130 = arith.addi %23, %129 : tensor<128x64xi32, #linear1>
         %131 = arith.addi %25, %130 : tensor<128x64xi32, #linear1>
-        %132 = amdg.buffer_load_to_local %a_ptr[%131] mask = %a_top_mask_55 other = %cst_4 into %27 {contiguity = 8 : i32, ttg.amd.sched_group_barrier.machine_count = 2 : i32, ttg.amd.sched_group_barrier.machine_mask = 2048 : i32, ttg.amd.sched_group_barrier.mfma_cover = 4 : i32} : !tt.ptr<bf16>[tensor<128x64xi32, #linear1>] tensor<128x64xbf16, #linear1> -> <128x64xbf16, #shared, #smem, mutable>
+        %132 = amdg.buffer_load_to_local %a_ptr[%131] mask = %a_top_mask_55 other = %cst_0 into %27 {contiguity = 8 : i32, ttg.amd.sched_group_barrier.machine_count = 2 : i32, ttg.amd.sched_group_barrier.machine_mask = 2048 : i32, ttg.amd.sched_group_barrier.mfma_cover = 4 : i32} : !tt.ptr<bf16>[tensor<128x64xi32, #linear1>] tensor<128x64xbf16, #linear1> -> <128x64xbf16, #shared, #smem, mutable>
         %133 = ttg.async_commit_group
         scf.yield %b_right_104, %130 : tensor<64x128xbf16, #ttg.dot_op<{opIdx = 1, parent = #mma, kWidth = 8}>>, tensor<128x64xi32, #linear1>
       } {triton.warp_pipeline.allow_memory_reorder, triton.warp_pipeline.priority = 1 : i32, triton.warp_pipeline.stage = "mem"}
@@ -256,7 +256,7 @@ module attributes {tlx.has_explicit_local_mem_access = true, triton.skip_generic
       %113 = scf.execute_region -> tensor<64x128xbf16, #ttg.dot_op<{opIdx = 1, parent = #mma, kWidth = 8}>> no_inline {
         %b_left_104 = ttg.local_load %45 {ttg.amd.sched_group_barrier.machine_count = 8 : i32, ttg.amd.sched_group_barrier.machine_mask = 256 : i32, ttg.amdg.syncedViaAsyncWait = true} : !ttg.memdesc<64x128xbf16, #shared1, #smem, mutable> -> tensor<64x128xbf16, #ttg.dot_op<{opIdx = 1, parent = #mma, kWidth = 8}>>
         %129 = arith.addi %31, %110#1 : tensor<128x64xi32, #linear1>
-        %130 = amdg.buffer_load_to_local %a_ptr[%129] mask = %a_bot_mask_59 other = %cst_4 into %33 {contiguity = 8 : i32, ttg.amd.sched_group_barrier.machine_count = 2 : i32, ttg.amd.sched_group_barrier.machine_mask = 2048 : i32, ttg.amd.sched_group_barrier.mfma_cover = 4 : i32} : !tt.ptr<bf16>[tensor<128x64xi32, #linear1>] tensor<128x64xbf16, #linear1> -> <128x64xbf16, #shared, #smem, mutable>
+        %130 = amdg.buffer_load_to_local %a_ptr[%129] mask = %a_bot_mask_59 other = %cst_0 into %33 {contiguity = 8 : i32, ttg.amd.sched_group_barrier.machine_count = 2 : i32, ttg.amd.sched_group_barrier.machine_mask = 2048 : i32, ttg.amd.sched_group_barrier.mfma_cover = 4 : i32} : !tt.ptr<bf16>[tensor<128x64xi32, #linear1>] tensor<128x64xbf16, #linear1> -> <128x64xbf16, #shared, #smem, mutable>
         %131 = ttg.async_commit_group
         scf.yield %b_left_104 : tensor<64x128xbf16, #ttg.dot_op<{opIdx = 1, parent = #mma, kWidth = 8}>>
       } {triton.warp_pipeline.allow_memory_reorder, triton.warp_pipeline.priority = 1 : i32, triton.warp_pipeline.stage = "mem"}
@@ -268,7 +268,7 @@ module attributes {tlx.has_explicit_local_mem_access = true, triton.skip_generic
       %116:2 = scf.execute_region -> (tensor<128x64xbf16, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 8}>>, tensor<64x128xi32, #linear>) no_inline {
         %a_top_104 = ttg.local_load %51 {ttg.amd.sched_group_barrier.machine_count = 8 : i32, ttg.amd.sched_group_barrier.machine_mask = 256 : i32, ttg.amdg.syncedViaAsyncWait = true} : !ttg.memdesc<128x64xbf16, #shared, #smem, mutable> -> tensor<128x64xbf16, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 8}>>
         %129 = arith.addi %39, %107#1 : tensor<64x128xi32, #linear>
-        %130 = amdg.buffer_load_to_local %b_ptr[%129] mask = %b_right_mask_75 other = %cst_5 into %41 {contiguity = 8 : i32, ttg.amd.sched_group_barrier.machine_count = 2 : i32, ttg.amd.sched_group_barrier.machine_mask = 2048 : i32, ttg.amd.sched_group_barrier.mfma_cover = 4 : i32} : !tt.ptr<bf16>[tensor<64x128xi32, #linear>] tensor<64x128xbf16, #linear> -> <64x128xbf16, #shared1, #smem, mutable>
+        %130 = amdg.buffer_load_to_local %b_ptr[%129] mask = %b_right_mask_75 other = %cst_1 into %41 {contiguity = 8 : i32, ttg.amd.sched_group_barrier.machine_count = 2 : i32, ttg.amd.sched_group_barrier.machine_mask = 2048 : i32, ttg.amd.sched_group_barrier.mfma_cover = 4 : i32} : !tt.ptr<bf16>[tensor<64x128xi32, #linear>] tensor<64x128xbf16, #linear> -> <64x128xbf16, #shared1, #smem, mutable>
         %131 = ttg.async_commit_group
         scf.yield %a_top_104, %129 : tensor<128x64xbf16, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 8}>>, tensor<64x128xi32, #linear>
       } {triton.warp_pipeline.allow_memory_reorder, triton.warp_pipeline.priority = 1 : i32, triton.warp_pipeline.stage = "mem"}
@@ -280,7 +280,7 @@ module attributes {tlx.has_explicit_local_mem_access = true, triton.skip_generic
       %119 = scf.execute_region -> tensor<128x64xbf16, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 8}>> no_inline {
         %a_bot_104 = ttg.local_load %57 {ttg.amd.sched_group_barrier.machine_count = 8 : i32, ttg.amd.sched_group_barrier.machine_mask = 256 : i32, ttg.amdg.syncedViaAsyncWait = true} : !ttg.memdesc<128x64xbf16, #shared, #smem, mutable> -> tensor<128x64xbf16, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 8}>>
         %129 = arith.addi %107#2, %cst : tensor<64x128xi32, #linear>
-        %130 = amdg.buffer_load_to_local %b_ptr[%129] mask = %b_left_mask_68 other = %cst_5 into %45 {contiguity = 8 : i32, ttg.amd.sched_group_barrier.machine_count = 2 : i32, ttg.amd.sched_group_barrier.machine_mask = 2048 : i32, ttg.amd.sched_group_barrier.mfma_cover = 4 : i32} : !tt.ptr<bf16>[tensor<64x128xi32, #linear>] tensor<64x128xbf16, #linear> -> <64x128xbf16, #shared1, #smem, mutable>
+        %130 = amdg.buffer_load_to_local %b_ptr[%129] mask = %b_left_mask_68 other = %cst_1 into %45 {contiguity = 8 : i32, ttg.amd.sched_group_barrier.machine_count = 2 : i32, ttg.amd.sched_group_barrier.machine_mask = 2048 : i32, ttg.amd.sched_group_barrier.mfma_cover = 4 : i32} : !tt.ptr<bf16>[tensor<64x128xi32, #linear>] tensor<64x128xbf16, #linear> -> <64x128xbf16, #shared1, #smem, mutable>
         %131 = ttg.async_commit_group
         scf.yield %a_bot_104 : tensor<128x64xbf16, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 8}>>
       } {triton.warp_pipeline.allow_memory_reorder, triton.warp_pipeline.priority = 1 : i32, triton.warp_pipeline.stage = "mem"}
@@ -292,7 +292,7 @@ module attributes {tlx.has_explicit_local_mem_access = true, triton.skip_generic
       %122 = scf.execute_region -> tensor<64x128xbf16, #ttg.dot_op<{opIdx = 1, parent = #mma, kWidth = 8}>> no_inline {
         %b_right_104 = ttg.local_load %61 {ttg.amd.sched_group_barrier.machine_count = 8 : i32, ttg.amd.sched_group_barrier.machine_mask = 256 : i32, ttg.amdg.syncedViaAsyncWait = true} : !ttg.memdesc<64x128xbf16, #shared1, #smem, mutable> -> tensor<64x128xbf16, #ttg.dot_op<{opIdx = 1, parent = #mma, kWidth = 8}>>
         %129 = arith.addi %49, %110#1 : tensor<128x64xi32, #linear1>
-        %130 = amdg.buffer_load_to_local %a_ptr[%129] mask = %a_top_mask_55 other = %cst_4 into %51 {contiguity = 8 : i32, ttg.amd.sched_group_barrier.machine_count = 2 : i32, ttg.amd.sched_group_barrier.machine_mask = 2048 : i32, ttg.amd.sched_group_barrier.mfma_cover = 4 : i32} : !tt.ptr<bf16>[tensor<128x64xi32, #linear1>] tensor<128x64xbf16, #linear1> -> <128x64xbf16, #shared, #smem, mutable>
+        %130 = amdg.buffer_load_to_local %a_ptr[%129] mask = %a_top_mask_55 other = %cst_0 into %51 {contiguity = 8 : i32, ttg.amd.sched_group_barrier.machine_count = 2 : i32, ttg.amd.sched_group_barrier.machine_mask = 2048 : i32, ttg.amd.sched_group_barrier.mfma_cover = 4 : i32} : !tt.ptr<bf16>[tensor<128x64xi32, #linear1>] tensor<128x64xbf16, #linear1> -> <128x64xbf16, #shared, #smem, mutable>
         %131 = ttg.async_commit_group
         scf.yield %b_right_104 : tensor<64x128xbf16, #ttg.dot_op<{opIdx = 1, parent = #mma, kWidth = 8}>>
       } {triton.warp_pipeline.allow_memory_reorder, triton.warp_pipeline.priority = 1 : i32, triton.warp_pipeline.stage = "mem"}
@@ -304,7 +304,7 @@ module attributes {tlx.has_explicit_local_mem_access = true, triton.skip_generic
       %125 = scf.execute_region -> tensor<64x128xbf16, #ttg.dot_op<{opIdx = 1, parent = #mma, kWidth = 8}>> no_inline {
         %b_left_104 = ttg.local_load %13 {ttg.amd.sched_group_barrier.machine_count = 8 : i32, ttg.amd.sched_group_barrier.machine_mask = 256 : i32, ttg.amdg.syncedViaAsyncWait = true} : !ttg.memdesc<64x128xbf16, #shared1, #smem, mutable> -> tensor<64x128xbf16, #ttg.dot_op<{opIdx = 1, parent = #mma, kWidth = 8}>>
         %129 = arith.addi %55, %110#1 : tensor<128x64xi32, #linear1>
-        %130 = amdg.buffer_load_to_local %a_ptr[%129] mask = %a_bot_mask_59 other = %cst_4 into %57 {contiguity = 8 : i32, ttg.amd.sched_group_barrier.machine_count = 2 : i32, ttg.amd.sched_group_barrier.machine_mask = 2048 : i32, ttg.amd.sched_group_barrier.mfma_cover = 4 : i32} : !tt.ptr<bf16>[tensor<128x64xi32, #linear1>] tensor<128x64xbf16, #linear1> -> <128x64xbf16, #shared, #smem, mutable>
+        %130 = amdg.buffer_load_to_local %a_ptr[%129] mask = %a_bot_mask_59 other = %cst_0 into %57 {contiguity = 8 : i32, ttg.amd.sched_group_barrier.machine_count = 2 : i32, ttg.amd.sched_group_barrier.machine_mask = 2048 : i32, ttg.amd.sched_group_barrier.mfma_cover = 4 : i32} : !tt.ptr<bf16>[tensor<128x64xi32, #linear1>] tensor<128x64xbf16, #linear1> -> <128x64xbf16, #shared, #smem, mutable>
         %131 = ttg.async_commit_group
         scf.yield %b_left_104 : tensor<64x128xbf16, #ttg.dot_op<{opIdx = 1, parent = #mma, kWidth = 8}>>
       } {triton.warp_pipeline.allow_memory_reorder, triton.warp_pipeline.priority = 1 : i32, triton.warp_pipeline.stage = "mem"}
@@ -316,7 +316,7 @@ module attributes {tlx.has_explicit_local_mem_access = true, triton.skip_generic
       %128:3 = scf.execute_region -> (tensor<128x64xbf16, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 8}>>, i32, i32) no_inline {
         %a_top_104 = ttg.local_load %27 {ttg.amd.sched_group_barrier.machine_count = 8 : i32, ttg.amd.sched_group_barrier.machine_mask = 256 : i32, ttg.amdg.syncedViaAsyncWait = true} : !ttg.memdesc<128x64xbf16, #shared, #smem, mutable> -> tensor<128x64xbf16, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 8}>>
         %129 = arith.addi %116#1, %cst : tensor<64x128xi32, #linear>
-        %130 = amdg.buffer_load_to_local %b_ptr[%129] mask = %b_right_mask_75 other = %cst_5 into %61 {contiguity = 8 : i32, ttg.amd.sched_group_barrier.machine_count = 2 : i32, ttg.amd.sched_group_barrier.machine_mask = 2048 : i32, ttg.amd.sched_group_barrier.mfma_cover = 4 : i32} : !tt.ptr<bf16>[tensor<64x128xi32, #linear>] tensor<64x128xbf16, #linear> -> <64x128xbf16, #shared1, #smem, mutable>
+        %130 = amdg.buffer_load_to_local %b_ptr[%129] mask = %b_right_mask_75 other = %cst_1 into %61 {contiguity = 8 : i32, ttg.amd.sched_group_barrier.machine_count = 2 : i32, ttg.amd.sched_group_barrier.machine_mask = 2048 : i32, ttg.amd.sched_group_barrier.mfma_cover = 4 : i32} : !tt.ptr<bf16>[tensor<64x128xi32, #linear>] tensor<64x128xbf16, #linear> -> <64x128xbf16, #shared1, #smem, mutable>
         %131 = ttg.async_commit_group
         %ka_105 = arith.addi %ka_97, %c128_i32 : i32
         %kb_106 = arith.addi %kb, %c128_i32 : i32
@@ -377,13 +377,13 @@ module attributes {tlx.has_explicit_local_mem_access = true, triton.skip_generic
       %a_top_t_116 = arith.addi %a_top_t_112, %a_top_t_114 : tensor<128x64xi32, #blocked>
       %a_top_t_117 = tt.splat %a_top_t_115 : i32 -> tensor<128x64xi32, #blocked>
       %a_top_t_118 = arith.addi %a_top_t_117, %a_top_t_116 : tensor<128x64xi32, #blocked>
-      %a_top_t_119 = amdg.buffer_load %a_ptr[%a_top_t_118], %a_top_t_107, %cst_1 {contiguity = 8 : i32, ttg.amd.sched_group_barrier.machine_count = 2 : i32, ttg.amd.sched_group_barrier.machine_mask = 32 : i32, ttg.amd.sched_group_barrier.mfma_cover = 4 : i32} : !tt.ptr<bf16> -> tensor<128x64xbf16, #blocked>
+      %a_top_t_119 = amdg.buffer_load %a_ptr[%a_top_t_118], %a_top_t_107, %cst_2 {contiguity = 8 : i32, ttg.amd.sched_group_barrier.machine_count = 2 : i32, ttg.amd.sched_group_barrier.machine_mask = 32 : i32, ttg.amd.sched_group_barrier.mfma_cover = 4 : i32} : !tt.ptr<bf16> -> tensor<128x64xbf16, #blocked>
       %a_bot_t_120 = arith.andi %a_bot_t_93, %a_top_t_106 : tensor<128x64xi1, #blocked>
       %a_bot_t_121 = arith.addi %a_bot_t_94, %split_start : i32
       %a_bot_t_122 = arith.addi %a_bot_t_121, %kk : i32
       %a_bot_t_123 = tt.splat %a_bot_t_122 : i32 -> tensor<128x64xi32, #blocked>
       %a_bot_t_124 = arith.addi %a_bot_t_123, %a_top_t_116 : tensor<128x64xi32, #blocked>
-      %a_bot_t_125 = amdg.buffer_load %a_ptr[%a_bot_t_124], %a_bot_t_120, %cst_1 {contiguity = 8 : i32, ttg.amd.sched_group_barrier.machine_count = 2 : i32, ttg.amd.sched_group_barrier.machine_mask = 32 : i32, ttg.amd.sched_group_barrier.mfma_cover = 4 : i32} : !tt.ptr<bf16> -> tensor<128x64xbf16, #blocked>
+      %a_bot_t_125 = amdg.buffer_load %a_ptr[%a_bot_t_124], %a_bot_t_120, %cst_2 {contiguity = 8 : i32, ttg.amd.sched_group_barrier.machine_count = 2 : i32, ttg.amd.sched_group_barrier.machine_mask = 32 : i32, ttg.amd.sched_group_barrier.mfma_cover = 4 : i32} : !tt.ptr<bf16> -> tensor<128x64xbf16, #blocked>
       %b_left_t = tt.expand_dims %k_mask_105 {axis = 1 : i32} : tensor<64xi1, #ttg.slice<{dim = 1, parent = #blocked1}>> -> tensor<64x1xi1, #blocked1>
       %b_left_t_126 = tt.broadcast %b_left_t : tensor<64x1xi1, #blocked1> -> tensor<64x128xi1, #blocked1>
       %b_left_t_127 = arith.andi %b_left_t_126, %b_left_mask_69 : tensor<64x128xi1, #blocked1>
@@ -399,14 +399,14 @@ module attributes {tlx.has_explicit_local_mem_access = true, triton.skip_generic
       %b_left_t_137 = arith.addi %b_left_t_130, %b_left_t_135 : tensor<64x128xi32, #blocked1>
       %b_left_t_138 = tt.splat %b_left_t_136 : i32 -> tensor<64x128xi32, #blocked1>
       %b_left_t_139 = arith.addi %b_left_t_138, %b_left_t_137 : tensor<64x128xi32, #blocked1>
-      %b_left_t_140 = amdg.buffer_load %b_ptr[%b_left_t_139], %b_left_t_127, %cst_2 {contiguity = 8 : i32, ttg.amd.sched_group_barrier.machine_count = 2 : i32, ttg.amd.sched_group_barrier.machine_mask = 32 : i32, ttg.amd.sched_group_barrier.mfma_cover = 4 : i32} : !tt.ptr<bf16> -> tensor<64x128xbf16, #blocked1>
+      %b_left_t_140 = amdg.buffer_load %b_ptr[%b_left_t_139], %b_left_t_127, %cst_3 {contiguity = 8 : i32, ttg.amd.sched_group_barrier.machine_count = 2 : i32, ttg.amd.sched_group_barrier.machine_mask = 32 : i32, ttg.amd.sched_group_barrier.mfma_cover = 4 : i32} : !tt.ptr<bf16> -> tensor<64x128xbf16, #blocked1>
       %b_right_t = arith.andi %b_left_t_126, %b_right_mask_76 : tensor<64x128xi1, #blocked1>
       %b_right_t_141 = arith.addi %offs_bn, %c128_i32 : i32
       %b_right_t_142 = arith.muli %b_right_t_141, %stride_bn : i32
       %b_right_t_143 = arith.addi %b_left_t_129, %b_right_t_142 : i32
       %b_right_t_144 = tt.splat %b_right_t_143 : i32 -> tensor<64x128xi32, #blocked1>
       %b_right_t_145 = arith.addi %b_right_t_144, %b_left_t_137 : tensor<64x128xi32, #blocked1>
-      %b_right_t_146 = amdg.buffer_load %b_ptr[%b_right_t_145], %b_right_t, %cst_2 {contiguity = 8 : i32, ttg.amd.sched_group_barrier.machine_count = 2 : i32, ttg.amd.sched_group_barrier.machine_mask = 32 : i32, ttg.amd.sched_group_barrier.mfma_cover = 4 : i32} : !tt.ptr<bf16> -> tensor<64x128xbf16, #blocked1>
+      %b_right_t_146 = amdg.buffer_load %b_ptr[%b_right_t_145], %b_right_t, %cst_3 {contiguity = 8 : i32, ttg.amd.sched_group_barrier.machine_count = 2 : i32, ttg.amd.sched_group_barrier.machine_mask = 32 : i32, ttg.amd.sched_group_barrier.mfma_cover = 4 : i32} : !tt.ptr<bf16> -> tensor<64x128xbf16, #blocked1>
       %a_top_t_147 = ttg.convert_layout %a_top_t_119 : tensor<128x64xbf16, #blocked> -> tensor<128x64xbf16, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 8}>>
       %b_left_t_148 = ttg.convert_layout %b_left_t_140 : tensor<64x128xbf16, #blocked1> -> tensor<64x128xbf16, #ttg.dot_op<{opIdx = 1, parent = #mma, kWidth = 8}>>
       %acc_tl_149 = tt.dot %a_top_t_147, %b_left_t_148, %acc_tl_97 {ttg.amd.sched_group_barrier.machine_count = 16 : i32, ttg.amd.sched_group_barrier.machine_mask = 8 : i32} : tensor<128x64xbf16, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 8}>> * tensor<64x128xbf16, #ttg.dot_op<{opIdx = 1, parent = #mma, kWidth = 8}>> -> tensor<128x128xf32, #mma>
