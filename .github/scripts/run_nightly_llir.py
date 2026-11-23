@@ -4,12 +4,12 @@
 Nightly helper for .github/workflows/nightly-llvm.yml. CPU-only and
 stdlib-only so it runs on stock GitHub-hosted runners: for each
 ``kernel.llir`` in the repo it invokes ``llc -mcpu=<arch>`` and records
-whether AMDGCN code generation succeeded, plus a hash of the emitted
+whether AMDGPU or NVPTX code generation succeeded, plus a hash of the emitted
 assembly so codegen drift between LLVM builds is visible in the
 results file.
 
 The arch is read from ``compile.json`` next to the kernel when present
-(``arch`` field), else from the first ``gfxNNN`` path component, else
+(``arch`` field), else from the first architecture path component, else
 ``gfx950``. Set ``LLVM_BIN`` to the directory containing ``llc`` when
 it is not on PATH.
 
@@ -28,7 +28,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-ARCH_RE = re.compile(r"gfx\d+[a-z]?")
+ARCH_RE = re.compile(r"gfx\d+[a-z]?|sm(?:90|100)")
 
 
 def find_llc() -> str:
@@ -58,6 +58,23 @@ def arch_for(case_dir: Path) -> str:
     return "gfx950"
 
 
+def llc_target_args(arch: str, case_dir: Path) -> list[str]:
+    if arch.startswith("sm"):
+        args = [
+            "-mtriple=nvptx64-nvidia-cuda",
+            f"-mcpu=sm_{arch.removeprefix('sm')}a",
+            "-target-abi=shortptr",
+        ]
+        reference = case_dir / "kernel.ptx"
+        if reference.is_file():
+            with reference.open() as stream:
+                version = re.search(r"^\.version (\d+)\.(\d+)", stream.read(2048), re.M)
+            if version:
+                args.append(f"-mattr=+ptx{version[1]}{version[2]}")
+        return args
+    return ["-mcpu=" + arch]
+
+
 def main() -> int:
     root = Path(sys.argv[1] if len(sys.argv) > 1 else ".").resolve()
     llc = find_llc()
@@ -74,7 +91,7 @@ def main() -> int:
     for llir in kernels:
         arch = arch_for(llir.parent)
         proc = subprocess.run(
-            [llc, "-mcpu=" + arch, "-o", "-", str(llir)],
+            [llc, *llc_target_args(arch, llir.parent), "-o", "-", str(llir)],
             capture_output=True,
             text=True,
         )
@@ -88,7 +105,7 @@ def main() -> int:
                 "asm_sha256": (
                     hashlib.sha256(proc.stdout.encode()).hexdigest() if ok else None
                 ),
-                "error": None if ok else proc.stderr.strip().splitlines()[-1:],
+                "error": None if ok else proc.stderr.strip().splitlines()[:3],
             }
         )
     payload = {
