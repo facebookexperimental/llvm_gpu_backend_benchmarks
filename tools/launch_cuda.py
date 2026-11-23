@@ -2,7 +2,7 @@
 
 """CUDA runtime launcher for exported LLVM-stage kernels (NVIDIA).
 
-Mirror of ``launch_hip`` for sm100: for every case dir with a kernel.llir
+Mirror of ``launch_hip`` for NVIDIA GPUs: for every case dir with a kernel.llir
 plus a compile.json ``launch`` record (see capture.record_launch), this
 builds a launchable CUBIN from the saved LLIR (default backend options),
 replays the recorded launch on GPU via raw CUDA driver calls, and reports
@@ -231,7 +231,7 @@ def launch_case(
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Replay exported kernels via CUDA.")
-    parser.add_argument("--arch", required=True, choices=["sm100"])
+    parser.add_argument("--arch", required=True, choices=["sm90", "sm100"])
     parser.add_argument("--out", required=True, help="export root")
     parser.add_argument("--limit", type=int, default=0, help="launch at most N cases")
     parser.add_argument(

@@ -121,7 +121,7 @@ def check_llir_structure(text: str, arch: str = "gfx950") -> list[str]:
     problems = []
     if "; ModuleID" not in text[:500] and "source_filename" not in text[:500]:
         problems.append("missing LLVM module header")
-    if arch == "sm100":
+    if arch.startswith("sm"):
         # NVPTX LLIR from the MLIR LLVM dialect carries no target-triple
         # line; the ptx_kernel definitions are the arch marker.
         if not _PTX_KERNEL_RE.search(text):
@@ -323,7 +323,9 @@ def validate_tree(out_root: str, arch: str, source: str = "", target: str = "") 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Validate a benchmark export.")
     parser.add_argument(
-        "--arch", required=True, choices=["gfx950", "gfx942", "gfx1250", "sm100"]
+        "--arch",
+        required=True,
+        choices=["gfx950", "gfx942", "gfx1250", "sm90", "sm100"],
     )
     parser.add_argument("--out", required=True, help="export root (parent of <arch>)")
     parser.add_argument(

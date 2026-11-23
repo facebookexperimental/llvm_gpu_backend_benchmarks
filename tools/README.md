@@ -47,4 +47,5 @@ python3 collect_metadata.py --arch gfx942 --out ..
 ```
 
 Writes per-case FLOPs, argument sizes, and replay readiness to `metadata.json`.
-The tools support `gfx942`, `gfx950`, `gfx1250`, and `sm100`.
+The tools support `gfx942`, `gfx950`, `gfx1250`, `sm90`, and `sm100`.
+Use the CUDA launcher on an H100 for `sm90` kernels.

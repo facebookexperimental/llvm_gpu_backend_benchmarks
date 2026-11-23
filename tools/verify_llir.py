@@ -42,7 +42,7 @@ def structural_check(text: str, arch: str = "gfx950") -> list[str]:
     problems = []
     if "; ModuleID" not in text[:500] and "source_filename" not in text[:500]:
         problems.append("missing LLVM module header")
-    if arch == "sm100":
+    if arch.startswith("sm"):
         # NVPTX LLIR from the MLIR LLVM dialect carries no target-triple
         # line; the ptx_kernel definitions are the arch marker.
         if not PTX_KERNEL_RE.search(text):
@@ -83,7 +83,7 @@ def normalize_ptx(text: str) -> str:
 
 
 def _normalize(text: str, arch: str) -> str:
-    return normalize_ptx(text) if arch == "sm100" else normalize_amdgcn(text)
+    return normalize_ptx(text) if arch.startswith("sm") else normalize_amdgcn(text)
 
 
 _DEFAULT_LABEL = "disable_packed_fp32_ops=False enable_fp_fusion=True"
@@ -108,12 +108,12 @@ def _check_case(source, target, case, cdir, arch, dump_regen) -> str:
     if problems:
         print(f"[verify] STRUCT {name}: {problems}")
         return "structural_fail"
-    ref_name = "kernel.ptx" if arch == "sm100" else "kernel.amdgcn"
+    ref_name = "kernel.ptx" if arch.startswith("sm") else "kernel.amdgcn"
     ref_path = os.path.join(cdir, ref_name)
     if not os.path.isfile(ref_path):
         print(f"[verify] SKIP {name}: no {ref_name}")
         return "skip"
-    trip = round_trip_ptx if arch == "sm100" else round_trip
+    trip = round_trip_ptx if arch.startswith("sm") else round_trip
     try:
         candidates = trip(llir, arch)
     except Exception as e:  # noqa: BLE001 - record and continue
@@ -121,7 +121,7 @@ def _check_case(source, target, case, cdir, arch, dump_regen) -> str:
         return "roundtrip_fail"
     ref = open(ref_path).read()
     matched = _match_candidate(candidates, ref, _normalize(ref, arch), arch)
-    if matched is None and arch != "sm100":
+    if matched is None and not arch.startswith("sm"):
         # Fall back to the full grid (TLX per-config pressure flags).
         try:
             candidates = round_trip(llir, arch, full_grid=True)
@@ -156,7 +156,9 @@ def _check_case(source, target, case, cdir, arch, dump_regen) -> str:
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Verify exported LLIR via LLVM.")
     parser.add_argument(
-        "--arch", required=True, choices=["gfx950", "gfx942", "gfx1250", "sm100"]
+        "--arch",
+        required=True,
+        choices=["gfx950", "gfx942", "gfx1250", "sm90", "sm100"],
     )
     parser.add_argument("--out", required=True, help="export root")
     parser.add_argument("--limit", type=int, default=0, help="check at most N cases")

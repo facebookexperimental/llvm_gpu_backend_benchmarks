@@ -252,7 +252,9 @@ def prune_tree(out_root: str, arch: str, dry_run: bool = False) -> dict:
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Prune loc info from exports.")
     parser.add_argument(
-        "--arch", required=True, choices=["gfx950", "gfx942", "gfx1250", "sm100"]
+        "--arch",
+        required=True,
+        choices=["gfx950", "gfx942", "gfx1250", "sm90", "sm100"],
     )
     parser.add_argument("--out", required=True, help="export root")
     parser.add_argument("--dry-run", action="store_true", help="report without writing")

@@ -127,6 +127,14 @@ class FlopsTest(unittest.TestCase):
         flops, formula = problem_flops("tlx_ops", "flash_attn_varlen", spec)
         self.assertEqual((flops, formula), (4 * 2 * 16 * (16 + 64), "varlen-attn"))
 
+    def test_cross_attention_varlen(self) -> None:
+        spec = {"heads": 2, "head_dim": 16, "lengths": [4, 8], "lengths_k": [12, 6]}
+        flops, formula = problem_flops("tlx_ops", "flash_attn_varlen", spec)
+        self.assertEqual((flops, formula), (4 * 2 * 16 * (48 + 48), "varlen-attn"))
+        spec["causal"] = True
+        flops, _ = problem_flops("tlx_ops", "flash_attn_varlen", spec)
+        self.assertEqual(flops, 4 * 2 * 16 * (42 + 21))
+
     def test_grouped(self) -> None:
         spec = {"groups": [[2, 4, 8], [1, 4, 8]]}
         flops, formula = problem_flops("tlx_ops", "grouped_gemm", spec)

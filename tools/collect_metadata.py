@@ -23,7 +23,7 @@ import sys
 VERSION = 1
 CASE_SUFFIX_RE = re.compile(r"__k\d+$")
 # Threads per warp/wavefront by arch (mirrors launch_hip / launch_cuda).
-WAVEFRONTS = {"gfx950": 64, "gfx942": 64, "gfx1250": 32, "sm100": 32}
+WAVEFRONTS = {"gfx950": 64, "gfx942": 64, "gfx1250": 32, "sm90": 32, "sm100": 32}
 
 
 def _siblings():
@@ -125,6 +125,20 @@ def _varlen_flops(spec: dict):
     if h is None or d is None or not isinstance(lengths, list) or not lengths:
         return None
     total = 0
+    lengths_k = spec.get("lengths_k")
+    if lengths_k is not None:
+        if not isinstance(lengths_k, list) or len(lengths_k) != len(lengths):
+            return None
+        for length_q, length_k in zip(lengths, lengths_k):
+            q, k = _num(length_q), _num(length_k)
+            if q is None or k is None:
+                return None
+            if spec.get("causal"):
+                visible = min(q, k)
+                total += visible * (2 * k - visible + 1) // 2
+            else:
+                total += q * k
+        return 4 * h * d * total
     for length in lengths:
         ell = _num(length)
         if ell is None:
@@ -345,7 +359,9 @@ def collect(out_root: str, arch: str) -> dict:
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Collect corpus metadata.")
     parser.add_argument(
-        "--arch", required=True, choices=["gfx950", "gfx942", "gfx1250", "sm100"]
+        "--arch",
+        required=True,
+        choices=["gfx950", "gfx942", "gfx1250", "sm90", "sm100"],
     )
     parser.add_argument("--out", required=True, help="export root")
     args = parser.parse_args(argv)

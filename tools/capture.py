@@ -206,6 +206,11 @@ def _is_tensor(value) -> bool:
 def _tensor_sample_hash(tensor) -> str | None:
     """Short hash over head+tail samples (cheap role probe, never raises)."""
     try:
+        if getattr(tensor, "is_cuda", False):
+            import torch
+
+            if torch.cuda.is_current_stream_capturing():
+                return None
         flat = tensor.detach().reshape(-1)
         n = flat.shape[0]
         head = flat[:8192].cpu().tolist()
@@ -265,7 +270,7 @@ def eval_grid(grid, meta: dict | None) -> tuple | None:
     try:
         if callable(grid):
             grid = grid(meta or {})
-        vals = tuple(int(v) for v in grid)
+        vals = (grid,) if isinstance(grid, int) else tuple(int(v) for v in grid)
         if len(vals) > 3 or not all(v >= 0 for v in vals):
             return None
         return vals + (1,) * (3 - len(vals))
@@ -305,6 +310,7 @@ def _record_grid(desc: dict, bound: list, kwargs) -> None:
             for name, value, is_const in bound
             if is_const and isinstance(value, (bool, int, float))
         }
+        desc["constexprs"] = meta
         grid = (kwargs or {}).get("grid")
         desc["grid_repr"] = repr(grid)[:200]
         grid_vals = eval_grid(grid, meta)
@@ -319,7 +325,7 @@ def _record_tensor_arg(value, rec: dict, pre) -> None:
     rec["shape"] = [int(d) for d in value.shape]
     rec["dtype"] = str(value.dtype).split(".")[-1]
     rec["stride"] = [int(s) for s in value.stride()]
-    post = _tensor_sample_hash(value)
+    post = _tensor_sample_hash(value) if pre is not None else None
     if pre is None or post is None:
         rec["role"] = "unknown"
     else:
@@ -339,7 +345,7 @@ def _record_scalar_arg(value, rec: dict) -> None:
         rec["value"] = value
     else:
         rec["kind"] = "other"
-        rec["repr"] = repr(value)[:200]
+        rec["type"] = type(value).__qualname__
 
 
 def record_launch(jit_fn, args, kwargs, compiled, pre_hashes=None) -> dict:
@@ -365,9 +371,16 @@ def record_launch(jit_fn, args, kwargs, compiled, pre_hashes=None) -> dict:
         desc["block"] = _launch_block(compiled)
     except Exception:
         pass
+    names = getattr(jit_fn, "arg_names", ()) or ()
+    constants = getattr(getattr(compiled, "src", None), "constants", {}) or {}
+    specialized = {
+        names[key[0]]
+        for key in constants
+        if isinstance(key, tuple) and len(key) == 1 and key[0] < len(names)
+    }
     pre_hashes = pre_hashes or {}
     for name, value, is_const in bound:
-        if not is_const:
+        if not is_const and name not in specialized:
             desc["args"].append(
                 _record_one_arg(desc, name, value, pre_hashes.get(name))
             )
@@ -534,10 +547,12 @@ class CaptureSession:
     def __enter__(self) -> "CaptureSession":
         from unittest import mock  # noqa: F401  (documents the technique)
 
+        import triton
         from triton.runtime.jit import JITFunction
 
         self._patch(JITFunction, "run", _run_wrapper(self, JITFunction.run))
 
+        self._patch(triton, "compile", _compile_wrapper(self, triton.compile))
         try:
             import triton.compiler.compiler as compiler_mod
 
@@ -580,7 +595,10 @@ class CaptureSession:
                     kernel = getattr(autotuner, "_last_compiled_kernel", None)
                     ms = timing[0] if isinstance(timing, (list, tuple)) else timing
                     if kernel is not None:
-                        session.timings[id(kernel)] = (repr(config), float(ms))
+                        session.timings[id(kernel)] = (
+                            repr(config.all_kwargs()),
+                            float(ms),
+                        )
                 except Exception:
                     pass
                 return timing
@@ -598,7 +616,7 @@ class CaptureSession:
         original_autotune = jit_mod.autotune
 
         def filtered_autotune(configs, *args, **kwargs):
-            kept = [c for c in configs if pattern.search(repr(c))]
+            kept = [c for c in configs if pattern.search(repr(c.all_kwargs()))]
             session._config_stats["candidates_seen"] += len(configs)
             session._config_stats["candidates_kept"] += len(kept)
             return original_autotune(kept or configs, *args, **kwargs)

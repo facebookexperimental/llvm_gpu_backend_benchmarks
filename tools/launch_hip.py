@@ -471,7 +471,9 @@ def launch_case(
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Replay exported kernels via HIP.")
     parser.add_argument(
-        "--arch", required=True, choices=["gfx950", "gfx942", "gfx1250", "sm100"]
+        "--arch",
+        required=True,
+        choices=["gfx950", "gfx942", "gfx1250", "sm90", "sm100"],
     )
     parser.add_argument("--out", required=True, help="export root")
     parser.add_argument("--limit", type=int, default=0, help="launch at most N cases")
@@ -500,8 +502,8 @@ def main(argv=None) -> int:
         # pyrefly: ignore [missing-import]
         from llir_build import iter_cases
 
-    if args.arch == "sm100":
-        print("[launch] sm100 kernels replay via launch_cuda, not HIP", flush=True)
+    if args.arch.startswith("sm"):
+        print(f"[launch] {args.arch} kernels replay via launch_cuda", flush=True)
         return 2
     hip = _hip()
     cases = [
