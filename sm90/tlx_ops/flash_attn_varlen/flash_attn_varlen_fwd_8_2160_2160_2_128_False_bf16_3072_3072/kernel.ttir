@@ -1,0 +1,122 @@
+module {
+  tt.func public @_schedule(%CuQ: !tt.ptr<i32> {tt.divisibility = 16 : i32}, %CuK: !tt.ptr<i32> {tt.divisibility = 16 : i32}, %Sched: !tt.ptr<i32> {tt.divisibility = 16 : i32}, %batch: i32, %H: i32) attributes {noinline = false} {
+    %cst = arith.constant dense<127> : tensor<32xi32>
+    %cst_0 = arith.constant dense<128> : tensor<32xi32>
+    %cst_1 = arith.constant dense<0> : tensor<32x32xi32>
+    %cst_2 = arith.constant dense<-1> : tensor<32xi32>
+    %cst_3 = arith.constant dense<0> : tensor<32xi32>
+    %cst_4 = arith.constant dense<1> : tensor<32xi32>
+    %c1_i32 = arith.constant 1 : i32
+    %c32_i32 = arith.constant 32 : i32
+    %c2_i32 = arith.constant 2 : i32
+    %c0_i32 = arith.constant 0 : i32
+    tt.store %Sched, %c0_i32 : !tt.ptr<i32>
+    %seq = tt.addptr %Sched, %c2_i32 : !tt.ptr<i32>, i32
+    %first = tt.addptr %seq, %batch : !tt.ptr<i32>, i32
+    %0 = arith.cmpi sle, %batch, %c32_i32 : i32
+    scf.if %0 {
+      %i = tt.make_range {end = 32 : i32, start = 0 : i32} : tensor<32xi32>
+      %ok = tt.splat %batch : i32 -> tensor<32xi32>
+      %ok_5 = arith.cmpi slt, %i, %ok : tensor<32xi32>
+      %q_len = tt.splat %CuQ : !tt.ptr<i32> -> tensor<32x!tt.ptr<i32>>
+      %q_len_6 = tt.addptr %q_len, %i : tensor<32x!tt.ptr<i32>>, tensor<32xi32>
+      %q_len_7 = tt.addptr %q_len_6, %cst_4 : tensor<32x!tt.ptr<i32>>, tensor<32xi32>
+      %q_len_8 = tt.load %q_len_7, %ok_5, %cst_3 : tensor<32x!tt.ptr<i32>>
+      %q_len_9 = tt.load %q_len_6, %ok_5, %cst_3 : tensor<32x!tt.ptr<i32>>
+      %q_len_10 = arith.subi %q_len_8, %q_len_9 : tensor<32xi32>
+      %k_len = tt.splat %CuK : !tt.ptr<i32> -> tensor<32x!tt.ptr<i32>>
+      %k_len_11 = tt.addptr %k_len, %i : tensor<32x!tt.ptr<i32>>, tensor<32xi32>
+      %k_len_12 = tt.addptr %k_len_11, %cst_4 : tensor<32x!tt.ptr<i32>>, tensor<32xi32>
+      %k_len_13 = tt.load %k_len_12, %ok_5, %cst_3 : tensor<32x!tt.ptr<i32>>
+      %k_len_14 = tt.load %k_len_11, %ok_5, %cst_3 : tensor<32x!tt.ptr<i32>>
+      %k_len_15 = arith.subi %k_len_13, %k_len_14 : tensor<32xi32>
+      %k_len_16 = arith.select %ok_5, %k_len_15, %cst_2 : tensor<32xi1>, tensor<32xi32>
+      %tiles = arith.addi %q_len_10, %cst : tensor<32xi32>
+      %tiles_17 = arith.divsi %tiles, %cst_0 : tensor<32xi32>
+      %tiles_18 = tt.splat %H : i32 -> tensor<32xi32>
+      %tiles_19 = arith.muli %tiles_18, %tiles_17 : tensor<32xi32>
+      %ahead = tt.expand_dims %k_len_16 {axis = 0 : i32} : tensor<32xi32> -> tensor<1x32xi32>
+      %ahead_20 = tt.expand_dims %k_len_16 {axis = 1 : i32} : tensor<32xi32> -> tensor<32x1xi32>
+      %ahead_21 = tt.broadcast %ahead : tensor<1x32xi32> -> tensor<32x32xi32>
+      %ahead_22 = tt.broadcast %ahead_20 : tensor<32x1xi32> -> tensor<32x32xi32>
+      %ahead_23 = arith.cmpi sgt, %ahead_21, %ahead_22 : tensor<32x32xi32>
+      %ahead_24 = arith.cmpi eq, %ahead_21, %ahead_22 : tensor<32x32xi32>
+      %ahead_25 = tt.expand_dims %i {axis = 0 : i32} : tensor<32xi32> -> tensor<1x32xi32>
+      %ahead_26 = tt.expand_dims %i {axis = 1 : i32} : tensor<32xi32> -> tensor<32x1xi32>
+      %ahead_27 = tt.broadcast %ahead_25 : tensor<1x32xi32> -> tensor<32x32xi32>
+      %ahead_28 = tt.broadcast %ahead_26 : tensor<32x1xi32> -> tensor<32x32xi32>
+      %ahead_29 = arith.cmpi slt, %ahead_27, %ahead_28 : tensor<32x32xi32>
+      %ahead_30 = arith.andi %ahead_24, %ahead_29 : tensor<32x32xi1>
+      %ahead_31 = arith.ori %ahead_23, %ahead_30 : tensor<32x32xi1>
+      %rank = arith.extui %ahead_31 : tensor<32x32xi1> to tensor<32x32xi32>
+      %rank_32 = "tt.reduce"(%rank) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+      ^bb0(%rank_33: i32, %rank_34: i32):
+        %rank_35 = arith.addi %rank_33, %rank_34 : i32
+        tt.reduce.return %rank_35 : i32
+      }) : (tensor<32x32xi32>) -> tensor<32xi32>
+      %1 = tt.splat %seq : !tt.ptr<i32> -> tensor<32x!tt.ptr<i32>>
+      %2 = tt.addptr %1, %rank_32 : tensor<32x!tt.ptr<i32>>, tensor<32xi32>
+      tt.store %2, %i, %ok_5 : tensor<32x!tt.ptr<i32>>
+      %3 = tt.splat %first : !tt.ptr<i32> -> tensor<32x!tt.ptr<i32>>
+      %4 = tt.addptr %3, %rank_32 : tensor<32x!tt.ptr<i32>>, tensor<32xi32>
+      %5 = tt.expand_dims %tiles_19 {axis = 0 : i32} : tensor<32xi32> -> tensor<1x32xi32>
+      %6 = tt.broadcast %5 : tensor<1x32xi32> -> tensor<32x32xi32>
+      %7 = arith.select %ahead_31, %6, %cst_1 : tensor<32x32xi1>, tensor<32x32xi32>
+      %8 = "tt.reduce"(%7) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+      ^bb0(%arg5: i32, %arg6: i32):
+        %11 = arith.addi %arg5, %arg6 : i32
+        tt.reduce.return %11 : i32
+      }) : (tensor<32x32xi32>) -> tensor<32xi32>
+      tt.store %4, %8, %ok_5 : tensor<32x!tt.ptr<i32>>
+      %9 = tt.addptr %Sched, %c1_i32 : !tt.ptr<i32>, i32
+      %10 = "tt.reduce"(%tiles_19) <{axis = 0 : i32, reduction_ordering = "unordered"}> ({
+      ^bb0(%arg5: i32, %arg6: i32):
+        %11 = arith.addi %arg5, %arg6 : i32
+        tt.reduce.return %11 : i32
+      }) : (tensor<32xi32>) -> i32
+      tt.store %9, %10 : !tt.ptr<i32>
+    } else {
+      %i = tt.make_range {end = 32 : i32, start = 0 : i32} : tensor<32xi32>
+      %ok = tt.splat %batch : i32 -> tensor<32xi32>
+      %tiles = tt.splat %CuQ : !tt.ptr<i32> -> tensor<32x!tt.ptr<i32>>
+      %tiles_5 = tt.splat %H : i32 -> tensor<32xi32>
+      %1 = tt.splat %seq : !tt.ptr<i32> -> tensor<32x!tt.ptr<i32>>
+      %2 = tt.splat %first : !tt.ptr<i32> -> tensor<32x!tt.ptr<i32>>
+      %total = scf.for %c = %c0_i32 to %batch step %c32_i32 iter_args(%total_6 = %c0_i32) -> (i32)  : i32 {
+        %i_7 = tt.splat %c : i32 -> tensor<32xi32>
+        %i_8 = arith.addi %i_7, %i : tensor<32xi32>
+        %ok_9 = arith.cmpi slt, %i_8, %ok : tensor<32xi32>
+        %tiles_10 = tt.addptr %tiles, %i_8 : tensor<32x!tt.ptr<i32>>, tensor<32xi32>
+        %tiles_11 = tt.addptr %tiles_10, %cst_4 : tensor<32x!tt.ptr<i32>>, tensor<32xi32>
+        %tiles_12 = tt.load %tiles_11, %ok_9, %cst_3 : tensor<32x!tt.ptr<i32>>
+        %tiles_13 = tt.load %tiles_10, %ok_9, %cst_3 : tensor<32x!tt.ptr<i32>>
+        %tiles_14 = arith.subi %tiles_12, %tiles_13 : tensor<32xi32>
+        %tiles_15 = arith.addi %tiles_14, %cst : tensor<32xi32>
+        %tiles_16 = arith.divsi %tiles_15, %cst_0 : tensor<32xi32>
+        %tiles_17 = arith.muli %tiles_5, %tiles_16 : tensor<32xi32>
+        %4 = tt.addptr %1, %i_8 : tensor<32x!tt.ptr<i32>>, tensor<32xi32>
+        tt.store %4, %i_8, %ok_9 : tensor<32x!tt.ptr<i32>>
+        %5 = tt.addptr %2, %i_8 : tensor<32x!tt.ptr<i32>>, tensor<32xi32>
+        %6 = "tt.scan"(%tiles_17) <{axis = 0 : i32, reverse = false}> ({
+        ^bb0(%arg7: i32, %arg8: i32):
+          %10 = arith.addi %arg7, %arg8 : i32
+          tt.scan.return %10 : i32
+        }) : (tensor<32xi32>) -> tensor<32xi32>
+        %7 = tt.splat %total_6 : i32 -> tensor<32xi32>
+        %8 = arith.addi %7, %6 : tensor<32xi32>
+        %9 = arith.subi %8, %tiles_17 : tensor<32xi32>
+        tt.store %5, %9, %ok_9 : tensor<32x!tt.ptr<i32>>
+        %total_18 = "tt.reduce"(%tiles_17) <{axis = 0 : i32, reduction_ordering = "unordered"}> ({
+        ^bb0(%total_20: i32, %total_21: i32):
+          %total_22 = arith.addi %total_20, %total_21 : i32
+          tt.reduce.return %total_22 : i32
+        }) : (tensor<32xi32>) -> i32
+        %total_19 = arith.addi %total_6, %total_18 : i32
+        scf.yield %total_19 : i32
+      }
+      %3 = tt.addptr %Sched, %c1_i32 : !tt.ptr<i32>, i32
+      tt.store %3, %total : !tt.ptr<i32>
+    }
+    tt.return
+  }
+}

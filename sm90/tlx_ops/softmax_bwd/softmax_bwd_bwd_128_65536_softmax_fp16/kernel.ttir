@@ -1,0 +1,52 @@
+#linear = #ttg.linear<{register = [[0, 1], [0, 2], [0, 512], [0, 1024], [0, 2048]], lane = [[0, 4], [0, 8], [0, 16], [0, 32], [0, 64]], warp = [[0, 128], [0, 256]], block = []}>
+module attributes {tlx.has_tlx_ops = true, triton.skip_generic_pipeline, "ttg.cluster-dim-x" = 1 : i32, "ttg.cluster-dim-y" = 1 : i32, "ttg.cluster-dim-z" = 1 : i32, "ttg.num-ctas" = 1 : i32, "ttg.num-warps" = 4 : i32, ttg.target = "cuda:90", "ttg.threads-per-warp" = 32 : i32} {
+  tt.func public @_wide(%X: !tt.ptr<f16> {tt.divisibility = 16 : i32}, %D: !tt.ptr<f16> {tt.divisibility = 16 : i32}, %PSum: !tt.ptr<f32> {tt.divisibility = 16 : i32}) attributes {noinline = false} {
+    %cst = arith.constant dense<0.000000e+00> : tensor<1x4096xf16>
+    %c16_i64 = arith.constant 16 : i64
+    %cst_0 = arith.constant dense<65536> : tensor<1x4096xi64>
+    %c65536_i64 = arith.constant 65536 : i64
+    %c = arith.constant 4096 : i64
+    %0 = tt.get_program_id x : i32
+    %1 = arith.extsi %0 : i32 to i64
+    %2 = tt.get_program_id y : i32
+    %3 = arith.extsi %2 : i32 to i64
+    %c_1 = arith.muli %3, %c : i64
+    %c_2 = tt.make_range {end = 4096 : i32, start = 0 : i32} : tensor<4096xi32>
+    %c_3 = arith.extsi %c_2 : tensor<4096xi32> to tensor<4096xi64>
+    %c_4 = tt.splat %c_1 : i64 -> tensor<4096xi64>
+    %c_5 = arith.addi %c_4, %c_3 : tensor<4096xi64>
+    %x = arith.muli %1, %c65536_i64 : i64
+    %x_6 = tt.expand_dims %c_5 {axis = 0 : i32} : tensor<4096xi64> -> tensor<1x4096xi64>
+    %x_7 = tt.splat %x : i64 -> tensor<1x4096xi64>
+    %x_8 = arith.addi %x_7, %x_6 : tensor<1x4096xi64>
+    %x_9 = arith.cmpi slt, %x_6, %cst_0 : tensor<1x4096xi64>
+    %out = tt.splat %X : !tt.ptr<f16> -> tensor<1x4096x!tt.ptr<f16>>
+    %out_10 = tt.addptr %out, %x_8 : tensor<1x4096x!tt.ptr<f16>>, tensor<1x4096xi64>
+    %out_11 = tt.load %out_10, %x_9, %cst : tensor<1x4096x!tt.ptr<f16>>
+    %out_12 = tlx.require_layout %out_11 : tensor<1x4096xf16> -> tensor<1x4096xf16, #tlx.no_verify_layout<#linear>>
+    %out_13 = tlx.release_layout %out_12 : tensor<1x4096xf16, #tlx.no_verify_layout<#linear>> -> tensor<1x4096xf16>
+    %x_14 = arith.extf %out_13 : tensor<1x4096xf16> to tensor<1x4096xf32>
+    %out_15 = tt.splat %D : !tt.ptr<f16> -> tensor<1x4096x!tt.ptr<f16>>
+    %out_16 = tt.addptr %out_15, %x_8 : tensor<1x4096x!tt.ptr<f16>>, tensor<1x4096xi64>
+    %out_17 = tt.load %out_16, %x_9, %cst : tensor<1x4096x!tt.ptr<f16>>
+    %out_18 = tlx.require_layout %out_17 : tensor<1x4096xf16> -> tensor<1x4096xf16, #tlx.no_verify_layout<#linear>>
+    %out_19 = tlx.release_layout %out_18 : tensor<1x4096xf16, #tlx.no_verify_layout<#linear>> -> tensor<1x4096xf16>
+    %d = arith.extf %out_19 : tensor<1x4096xf16> to tensor<1x4096xf32>
+    %total = arith.mulf %x_14, %d : tensor<1x4096xf32>
+    %total_20 = "tt.reduce"(%total) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%total_21: f32, %total_22: f32):
+      %total_23 = arith.addf %total_21, %total_22 : f32
+      tt.reduce.return %total_23 : f32
+    }) : (tensor<1x4096xf32>) -> tensor<1xf32>
+    %4 = arith.muli %1, %c16_i64 : i64
+    %5 = arith.addi %4, %3 : i64
+    %6 = tt.addptr %PSum, %5 : !tt.ptr<f32>, i64
+    %7 = "tt.reduce"(%total_20) <{axis = 0 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%arg3: f32, %arg4: f32):
+      %8 = arith.addf %arg3, %arg4 : f32
+      tt.reduce.return %8 : f32
+    }) : (tensor<1xf32>) -> f32
+    tt.store %6, %7 : !tt.ptr<f32>
+    tt.return
+  }
+}

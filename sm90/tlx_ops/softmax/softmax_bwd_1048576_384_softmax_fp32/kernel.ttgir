@@ -1,0 +1,150 @@
+#blocked = #ttg.blocked<{sizePerThread = [1, 1], threadsPerWarp = [1, 32], warpsPerCTA = [1, 4], order = [1, 0]}>
+#blocked1 = #ttg.blocked<{sizePerThread = [1, 1], threadsPerWarp = [1, 32], warpsPerCTA = [1, 4], order = [0, 1]}>
+#blocked2 = #ttg.blocked<{sizePerThread = [1, 4], threadsPerWarp = [1, 32], warpsPerCTA = [4, 1], order = [1, 0]}>
+module attributes {tlx.has_tlx_ops = true, triton.skip_generic_pipeline, "ttg.cluster-dim-x" = 1 : i32, "ttg.cluster-dim-y" = 1 : i32, "ttg.cluster-dim-z" = 1 : i32, ttg.early_tma_store_lowering = true, ttg.min_reg_auto_ws = 24 : i32, "ttg.num-ctas" = 1 : i32, "ttg.num-warps" = 4 : i32, ttg.target = "cuda:90", "ttg.threads-per-warp" = 32 : i32, "ttng.two-ctas" = false} {
+  tt.func public @_softmax(%X: !tt.ptr<f32> {tt.divisibility = 16 : i32}, %Y: !tt.ptr<f32> {tt.divisibility = 16 : i32}, %M: i32 {tt.divisibility = 16 : i32}) attributes {noinline = false} {
+    %cst = arith.constant dense<0xFF800000> : tensor<8xf32, #ttg.slice<{dim = 1, parent = #blocked}>>
+    %cst_0 = arith.constant dense<0.000000e+00> : tensor<8xf32, #ttg.slice<{dim = 1, parent = #blocked}>>
+    %cst_1 = arith.constant dense<1.44269502> : tensor<8x128xf32, #blocked>
+    %cst_2 = arith.constant dense<256> : tensor<128xi64, #ttg.slice<{dim = 0, parent = #blocked1}>>
+    %cst_3 = arith.constant dense<256> : tensor<128xi64, #ttg.slice<{dim = 0, parent = #blocked2}>>
+    %cst_4 = arith.constant dense<128> : tensor<128xi64, #ttg.slice<{dim = 0, parent = #blocked1}>>
+    %cst_5 = arith.constant dense<128> : tensor<128xi64, #ttg.slice<{dim = 0, parent = #blocked2}>>
+    %cst_6 = arith.constant dense<0xFF800000> : tensor<8x128xf32, #blocked>
+    %cst_7 = arith.constant dense<384> : tensor<8x1xi64, #blocked2>
+    %cst_8 = arith.constant dense<384> : tensor<1x128xi64, #blocked>
+    %cst_9 = arith.constant dense<384> : tensor<1x128xi64, #blocked2>
+    %c8_i64 = arith.constant 8 : i64
+    %cst_10 = arith.constant dense<0.000000e+00> : tensor<8x128xf32, #blocked2>
+    %rows = tt.get_program_id x : i32
+    %rows_11 = arith.extsi %rows : i32 to i64
+    %rows_12 = arith.muli %rows_11, %c8_i64 : i64
+    %rows_13 = tt.make_range {end = 8 : i32, start = 0 : i32} : tensor<8xi32, #ttg.slice<{dim = 1, parent = #blocked2}>>
+    %rows_14 = arith.extsi %rows_13 : tensor<8xi32, #ttg.slice<{dim = 1, parent = #blocked2}>> to tensor<8xi64, #ttg.slice<{dim = 1, parent = #blocked2}>>
+    %rows_15 = tt.splat %rows_12 : i64 -> tensor<8xi64, #ttg.slice<{dim = 1, parent = #blocked2}>>
+    %rows_16 = arith.addi %rows_15, %rows_14 : tensor<8xi64, #ttg.slice<{dim = 1, parent = #blocked2}>>
+    %cols = tt.make_range {end = 128 : i32, start = 0 : i32} : tensor<128xi32, #ttg.slice<{dim = 0, parent = #blocked2}>>
+    %cols_17 = tt.make_range {end = 128 : i32, start = 0 : i32} : tensor<128xi32, #ttg.slice<{dim = 0, parent = #blocked1}>>
+    %cols_18 = arith.extsi %cols : tensor<128xi32, #ttg.slice<{dim = 0, parent = #blocked2}>> to tensor<128xi64, #ttg.slice<{dim = 0, parent = #blocked2}>>
+    %cols_19 = arith.extsi %cols_17 : tensor<128xi32, #ttg.slice<{dim = 0, parent = #blocked1}>> to tensor<128xi64, #ttg.slice<{dim = 0, parent = #blocked1}>>
+    %mask = tt.expand_dims %rows_16 {axis = 1 : i32} : tensor<8xi64, #ttg.slice<{dim = 1, parent = #blocked2}>> -> tensor<8x1xi64, #blocked2>
+    %mask_20 = arith.extsi %M : i32 to i64
+    %mask_21 = tt.splat %mask_20 : i64 -> tensor<8x1xi64, #blocked2>
+    %mask_22 = arith.cmpi slt, %mask, %mask_21 : tensor<8x1xi64, #blocked2>
+    %mask_23 = tt.expand_dims %cols_18 {axis = 0 : i32} : tensor<128xi64, #ttg.slice<{dim = 0, parent = #blocked2}>> -> tensor<1x128xi64, #blocked2>
+    %mask_24 = tt.expand_dims %cols_19 {axis = 0 : i32} : tensor<128xi64, #ttg.slice<{dim = 0, parent = #blocked1}>> -> tensor<1x128xi64, #blocked1>
+    %x = ttg.convert_layout %mask_24 : tensor<1x128xi64, #blocked1> -> tensor<1x128xi64, #blocked>
+    %mask_25 = arith.cmpi slt, %mask_23, %cst_9 : tensor<1x128xi64, #blocked2>
+    %mask_26 = arith.cmpi slt, %x, %cst_8 : tensor<1x128xi64, #blocked>
+    %mask_27 = tt.broadcast %mask_22 : tensor<8x1xi1, #blocked2> -> tensor<8x128xi1, #blocked2>
+    %mask_28 = tt.broadcast %mask_25 : tensor<1x128xi1, #blocked2> -> tensor<8x128xi1, #blocked2>
+    %mask_29 = tt.broadcast %mask_26 : tensor<1x128xi1, #blocked> -> tensor<8x128xi1, #blocked>
+    %mask_30 = arith.andi %mask_27, %mask_28 : tensor<8x128xi1, #blocked2>
+    %x_31 = arith.muli %mask, %cst_7 : tensor<8x1xi64, #blocked2>
+    %x_32 = tt.broadcast %x_31 : tensor<8x1xi64, #blocked2> -> tensor<8x128xi64, #blocked2>
+    %x_33 = tt.broadcast %mask_23 : tensor<1x128xi64, #blocked2> -> tensor<8x128xi64, #blocked2>
+    %x_34 = arith.addi %x_32, %x_33 : tensor<8x128xi64, #blocked2>
+    %out = tt.splat %X : !tt.ptr<f32> -> tensor<8x128x!tt.ptr<f32>, #blocked2>
+    %out_35 = tt.addptr %out, %x_34 : tensor<8x128x!tt.ptr<f32>, #blocked2>, tensor<8x128xi64, #blocked2>
+    %out_36 = tt.load %out_35, %mask_30, %cst_10 : tensor<8x128x!tt.ptr<f32>, #blocked2>
+    %out_37 = ttg.convert_layout %out_36 : tensor<8x128xf32, #blocked2> -> tensor<8x128xf32, #blocked>
+    %x_38 = arith.select %mask_29, %out_37, %cst_6 : tensor<8x128xi1, #blocked>, tensor<8x128xf32, #blocked>
+    %value = "tt.reduce"(%x_38) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%total_94: f32, %total_95: f32):
+      %value_96 = arith.maxnumf %total_94, %total_95 : f32
+      tt.reduce.return %value_96 : f32
+    }) : (tensor<8x128xf32, #blocked>) -> tensor<8xf32, #ttg.slice<{dim = 1, parent = #blocked}>>
+    %total = arith.maxnumf %value, %cst : tensor<8xf32, #ttg.slice<{dim = 1, parent = #blocked}>>
+    %c = arith.addi %cols_18, %cst_5 : tensor<128xi64, #ttg.slice<{dim = 0, parent = #blocked2}>>
+    %c_39 = arith.addi %cols_19, %cst_4 : tensor<128xi64, #ttg.slice<{dim = 0, parent = #blocked1}>>
+    %mask_40 = tt.expand_dims %c {axis = 0 : i32} : tensor<128xi64, #ttg.slice<{dim = 0, parent = #blocked2}>> -> tensor<1x128xi64, #blocked2>
+    %mask_41 = tt.expand_dims %c_39 {axis = 0 : i32} : tensor<128xi64, #ttg.slice<{dim = 0, parent = #blocked1}>> -> tensor<1x128xi64, #blocked1>
+    %x_42 = ttg.convert_layout %mask_41 : tensor<1x128xi64, #blocked1> -> tensor<1x128xi64, #blocked>
+    %mask_43 = arith.cmpi slt, %mask_40, %cst_9 : tensor<1x128xi64, #blocked2>
+    %mask_44 = arith.cmpi slt, %x_42, %cst_8 : tensor<1x128xi64, #blocked>
+    %mask_45 = tt.broadcast %mask_43 : tensor<1x128xi1, #blocked2> -> tensor<8x128xi1, #blocked2>
+    %mask_46 = tt.broadcast %mask_44 : tensor<1x128xi1, #blocked> -> tensor<8x128xi1, #blocked>
+    %mask_47 = arith.andi %mask_27, %mask_45 : tensor<8x128xi1, #blocked2>
+    %x_48 = tt.broadcast %mask_40 : tensor<1x128xi64, #blocked2> -> tensor<8x128xi64, #blocked2>
+    %x_49 = arith.addi %x_32, %x_48 : tensor<8x128xi64, #blocked2>
+    %out_50 = tt.addptr %out, %x_49 : tensor<8x128x!tt.ptr<f32>, #blocked2>, tensor<8x128xi64, #blocked2>
+    %out_51 = tt.load %out_50, %mask_47, %cst_10 : tensor<8x128x!tt.ptr<f32>, #blocked2>
+    %out_52 = ttg.convert_layout %out_51 : tensor<8x128xf32, #blocked2> -> tensor<8x128xf32, #blocked>
+    %x_53 = arith.select %mask_46, %out_52, %cst_6 : tensor<8x128xi1, #blocked>, tensor<8x128xf32, #blocked>
+    %value_54 = "tt.reduce"(%x_53) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%total_94: f32, %total_95: f32):
+      %value_96 = arith.maxnumf %total_94, %total_95 : f32
+      tt.reduce.return %value_96 : f32
+    }) : (tensor<8x128xf32, #blocked>) -> tensor<8xf32, #ttg.slice<{dim = 1, parent = #blocked}>>
+    %total_55 = arith.maxnumf %total, %value_54 : tensor<8xf32, #ttg.slice<{dim = 1, parent = #blocked}>>
+    %c_56 = arith.addi %cols_18, %cst_3 : tensor<128xi64, #ttg.slice<{dim = 0, parent = #blocked2}>>
+    %c_57 = arith.addi %cols_19, %cst_2 : tensor<128xi64, #ttg.slice<{dim = 0, parent = #blocked1}>>
+    %mask_58 = tt.expand_dims %c_56 {axis = 0 : i32} : tensor<128xi64, #ttg.slice<{dim = 0, parent = #blocked2}>> -> tensor<1x128xi64, #blocked2>
+    %mask_59 = tt.expand_dims %c_57 {axis = 0 : i32} : tensor<128xi64, #ttg.slice<{dim = 0, parent = #blocked1}>> -> tensor<1x128xi64, #blocked1>
+    %x_60 = ttg.convert_layout %mask_59 : tensor<1x128xi64, #blocked1> -> tensor<1x128xi64, #blocked>
+    %mask_61 = arith.cmpi slt, %mask_58, %cst_9 : tensor<1x128xi64, #blocked2>
+    %mask_62 = arith.cmpi slt, %x_60, %cst_8 : tensor<1x128xi64, #blocked>
+    %mask_63 = tt.broadcast %mask_61 : tensor<1x128xi1, #blocked2> -> tensor<8x128xi1, #blocked2>
+    %mask_64 = tt.broadcast %mask_62 : tensor<1x128xi1, #blocked> -> tensor<8x128xi1, #blocked>
+    %mask_65 = arith.andi %mask_27, %mask_63 : tensor<8x128xi1, #blocked2>
+    %x_66 = tt.broadcast %mask_58 : tensor<1x128xi64, #blocked2> -> tensor<8x128xi64, #blocked2>
+    %x_67 = arith.addi %x_32, %x_66 : tensor<8x128xi64, #blocked2>
+    %out_68 = tt.addptr %out, %x_67 : tensor<8x128x!tt.ptr<f32>, #blocked2>, tensor<8x128xi64, #blocked2>
+    %out_69 = tt.load %out_68, %mask_65, %cst_10 : tensor<8x128x!tt.ptr<f32>, #blocked2>
+    %out_70 = ttg.convert_layout %out_69 : tensor<8x128xf32, #blocked2> -> tensor<8x128xf32, #blocked>
+    %x_71 = arith.select %mask_64, %out_70, %cst_6 : tensor<8x128xi1, #blocked>, tensor<8x128xf32, #blocked>
+    %value_72 = "tt.reduce"(%x_71) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%total_94: f32, %total_95: f32):
+      %value_96 = arith.maxnumf %total_94, %total_95 : f32
+      tt.reduce.return %value_96 : f32
+    }) : (tensor<8x128xf32, #blocked>) -> tensor<8xf32, #ttg.slice<{dim = 1, parent = #blocked}>>
+    %total_73 = arith.maxnumf %total_55, %value_72 : tensor<8xf32, #ttg.slice<{dim = 1, parent = #blocked}>>
+    %e = tt.expand_dims %total_73 {axis = 1 : i32} : tensor<8xf32, #ttg.slice<{dim = 1, parent = #blocked}>> -> tensor<8x1xf32, #blocked>
+    %e_74 = tt.broadcast %e : tensor<8x1xf32, #blocked> -> tensor<8x128xf32, #blocked>
+    %e_75 = arith.subf %x_38, %e_74 : tensor<8x128xf32, #blocked>
+    %e_76 = arith.mulf %e_75, %cst_1 : tensor<8x128xf32, #blocked>
+    %e_77 = math.exp2 %e_76 : tensor<8x128xf32, #blocked>
+    %denominator = "tt.reduce"(%e_77) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%denominator_94: f32, %denominator_95: f32):
+      %denominator_96 = arith.addf %denominator_94, %denominator_95 : f32
+      tt.reduce.return %denominator_96 : f32
+    }) : (tensor<8x128xf32, #blocked>) -> tensor<8xf32, #ttg.slice<{dim = 1, parent = #blocked}>>
+    %denominator_78 = arith.addf %denominator, %cst_0 : tensor<8xf32, #ttg.slice<{dim = 1, parent = #blocked}>>
+    %e_79 = arith.subf %x_53, %e_74 : tensor<8x128xf32, #blocked>
+    %e_80 = arith.mulf %e_79, %cst_1 : tensor<8x128xf32, #blocked>
+    %e_81 = math.exp2 %e_80 : tensor<8x128xf32, #blocked>
+    %denominator_82 = "tt.reduce"(%e_81) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%denominator_94: f32, %denominator_95: f32):
+      %denominator_96 = arith.addf %denominator_94, %denominator_95 : f32
+      tt.reduce.return %denominator_96 : f32
+    }) : (tensor<8x128xf32, #blocked>) -> tensor<8xf32, #ttg.slice<{dim = 1, parent = #blocked}>>
+    %denominator_83 = arith.addf %denominator_78, %denominator_82 : tensor<8xf32, #ttg.slice<{dim = 1, parent = #blocked}>>
+    %e_84 = arith.subf %x_71, %e_74 : tensor<8x128xf32, #blocked>
+    %e_85 = arith.mulf %e_84, %cst_1 : tensor<8x128xf32, #blocked>
+    %e_86 = math.exp2 %e_85 : tensor<8x128xf32, #blocked>
+    %denominator_87 = "tt.reduce"(%e_86) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%denominator_94: f32, %denominator_95: f32):
+      %denominator_96 = arith.addf %denominator_94, %denominator_95 : f32
+      tt.reduce.return %denominator_96 : f32
+    }) : (tensor<8x128xf32, #blocked>) -> tensor<8xf32, #ttg.slice<{dim = 1, parent = #blocked}>>
+    %denominator_88 = arith.addf %denominator_83, %denominator_87 : tensor<8xf32, #ttg.slice<{dim = 1, parent = #blocked}>>
+    %value_89 = tt.expand_dims %denominator_88 {axis = 1 : i32} : tensor<8xf32, #ttg.slice<{dim = 1, parent = #blocked}>> -> tensor<8x1xf32, #blocked>
+    %value_90 = tt.broadcast %value_89 : tensor<8x1xf32, #blocked> -> tensor<8x128xf32, #blocked>
+    %value_91 = arith.divf %e_77, %value_90 : tensor<8x128xf32, #blocked>
+    %0 = tt.splat %Y : !tt.ptr<f32> -> tensor<8x1x!tt.ptr<f32>, #blocked2>
+    %1 = tt.addptr %0, %x_31 : tensor<8x1x!tt.ptr<f32>, #blocked2>, tensor<8x1xi64, #blocked2>
+    %2 = tt.broadcast %1 : tensor<8x1x!tt.ptr<f32>, #blocked2> -> tensor<8x128x!tt.ptr<f32>, #blocked2>
+    %3 = tt.addptr %2, %x_33 : tensor<8x128x!tt.ptr<f32>, #blocked2>, tensor<8x128xi64, #blocked2>
+    %4 = ttg.convert_layout %value_91 : tensor<8x128xf32, #blocked> -> tensor<8x128xf32, #blocked2>
+    tt.store %3, %4, %mask_30 : tensor<8x128x!tt.ptr<f32>, #blocked2>
+    %value_92 = arith.divf %e_81, %value_90 : tensor<8x128xf32, #blocked>
+    %5 = tt.addptr %2, %x_48 : tensor<8x128x!tt.ptr<f32>, #blocked2>, tensor<8x128xi64, #blocked2>
+    %6 = ttg.convert_layout %value_92 : tensor<8x128xf32, #blocked> -> tensor<8x128xf32, #blocked2>
+    tt.store %5, %6, %mask_47 : tensor<8x128x!tt.ptr<f32>, #blocked2>
+    %value_93 = arith.divf %e_86, %value_90 : tensor<8x128xf32, #blocked>
+    %7 = tt.addptr %2, %x_66 : tensor<8x128x!tt.ptr<f32>, #blocked2>, tensor<8x128xi64, #blocked2>
+    %8 = ttg.convert_layout %value_93 : tensor<8x128xf32, #blocked> -> tensor<8x128xf32, #blocked2>
+    tt.store %7, %8, %mask_65 : tensor<8x128x!tt.ptr<f32>, #blocked2>
+    tt.return
+  }
+}

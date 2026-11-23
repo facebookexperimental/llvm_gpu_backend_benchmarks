@@ -1,0 +1,230 @@
+; ModuleID = 'LLVMDialectModule'
+source_filename = "LLVMDialectModule"
+target datalayout = "e-p3:32:32-p4:32:32-p5:32:32-p6:32:32-p7:32:32-p101:32:32-i64:64-i128:128-i256:256-v16:16-v32:32-n16:32:64"
+
+@global_smem = external addrspace(3) global [0 x i8], align 16
+
+; Function Attrs: nounwind
+define ptx_kernel void @addmm_kernel_gemv(ptr addrspace(1) align 16 %0, ptr addrspace(1) align 16 %1, ptr addrspace(1) align 16 %2, ptr addrspace(1) align 16 %3, i32 %4, i32 %5, i32 %6, ptr addrspace(1) nofree readnone captures(none) %7, ptr addrspace(1) nofree readnone captures(none) %8) local_unnamed_addr #0 {
+  %10 = tail call i32 @llvm.nvvm.read.ptx.sreg.tid.x()
+  %11 = tail call i32 @llvm.nvvm.read.ptx.sreg.ctaid.x()
+  %12 = shl i32 %11, 3
+  %13 = lshr i32 %10, 4
+  %14 = and i32 %13, 7
+  %15 = or disjoint i32 %14, %12
+  %16 = icmp slt i32 %15, %4
+  %17 = add i32 %5, 127
+  %18 = mul i32 %6, %15
+  %19 = sext i32 %18 to i64
+  %20 = getelementptr [2 x i8], ptr addrspace(1) %0, i64 %19
+  %21 = icmp sgt i32 %17, 127
+  br i1 %21, label %.lr.ph, label %.._crit_edge_crit_edge
+
+.._crit_edge_crit_edge:                           ; preds = %9
+  %.pre = lshr i32 %10, 2
+  br label %._crit_edge
+
+.lr.ph:                                           ; preds = %9
+  %22 = and i32 %10, 127
+  %23 = and i32 %10, 15
+  %24 = shl nuw nsw i32 %23, 3
+  %25 = lshr i32 %17, 7
+  %26 = lshr i32 %10, 2
+  %27 = and i32 %26, 24
+  %28 = or i32 %27, %10
+  %29 = shl nuw nsw i32 %28, 3
+  %30 = and i32 %29, 240
+  %31 = and i32 %10, 1
+  %32 = icmp eq i32 %31, 0
+  %33 = select i1 %32, i32 0, i32 320
+  %34 = xor i32 %30, %33
+  %35 = getelementptr inbounds nuw i8, ptr addrspace(3) @global_smem, i32 %34
+  %36 = shl nuw nsw i32 %23, 4
+  %37 = getelementptr inbounds nuw i8, ptr addrspace(3) @global_smem, i32 %36
+  %38 = xor i32 %36, 320
+  %39 = getelementptr inbounds nuw i8, ptr addrspace(3) @global_smem, i32 %38
+  %40 = zext nneg i32 %22 to i64
+  %41 = zext nneg i32 %5 to i64
+  %42 = zext nneg i32 %24 to i64
+  %wide.trip.count = zext nneg i32 %25 to i64
+  %43 = getelementptr inbounds nuw i8, ptr addrspace(3) %37, i32 4
+  %44 = getelementptr inbounds nuw i8, ptr addrspace(3) %37, i32 8
+  %45 = getelementptr inbounds nuw i8, ptr addrspace(3) %37, i32 12
+  %46 = getelementptr inbounds nuw i8, ptr addrspace(3) %39, i32 4
+  %47 = getelementptr inbounds nuw i8, ptr addrspace(3) %39, i32 8
+  %48 = getelementptr inbounds nuw i8, ptr addrspace(3) %39, i32 12
+  br label %49
+
+49:                                               ; preds = %.lr.ph, %49
+  %indvars.iv = phi i64 [ 0, %.lr.ph ], [ %indvars.iv.next, %49 ]
+  %50 = phi float [ 0.000000e+00, %.lr.ph ], [ %111, %49 ]
+  %51 = phi float [ 0.000000e+00, %.lr.ph ], [ %112, %49 ]
+  %52 = phi float [ 0.000000e+00, %.lr.ph ], [ %113, %49 ]
+  %53 = phi float [ 0.000000e+00, %.lr.ph ], [ %114, %49 ]
+  %54 = phi float [ 0.000000e+00, %.lr.ph ], [ %115, %49 ]
+  %55 = phi float [ 0.000000e+00, %.lr.ph ], [ %116, %49 ]
+  %56 = phi float [ 0.000000e+00, %.lr.ph ], [ %117, %49 ]
+  %57 = phi float [ 0.000000e+00, %.lr.ph ], [ %118, %49 ]
+  %58 = shl nuw nsw i64 %indvars.iv, 7
+  %59 = or disjoint i64 %58, %42
+  %60 = or disjoint i64 %58, %40
+  %61 = icmp samesign ult i64 %59, %41
+  %62 = icmp samesign ult i64 %60, %41
+  %63 = and i1 %16, %61
+  %64 = getelementptr [2 x i8], ptr addrspace(1) %20, i64 %59
+  %65 = tail call { i32, i32, i32, i32 } asm sideeffect "@$9 ld.global.v4.b32 { $0, $1, $2, $3 }, [ $8 + 0 ];", "=r,=r,=r,=r,0,1,2,3,l,b"(i32 0, i32 0, i32 0, i32 0, ptr addrspace(1) %64, i1 %63) #6
+  %66 = extractvalue { i32, i32, i32, i32 } %65, 0
+  %67 = bitcast i32 %66 to <2 x bfloat>
+  %68 = extractvalue { i32, i32, i32, i32 } %65, 1
+  %69 = bitcast i32 %68 to <2 x bfloat>
+  %70 = extractvalue { i32, i32, i32, i32 } %65, 2
+  %71 = bitcast i32 %70 to <2 x bfloat>
+  %72 = extractvalue { i32, i32, i32, i32 } %65, 3
+  %73 = bitcast i32 %72 to <2 x bfloat>
+  %74 = extractelement <2 x bfloat> %67, i64 0
+  %75 = extractelement <2 x bfloat> %67, i64 1
+  %76 = extractelement <2 x bfloat> %69, i64 0
+  %77 = extractelement <2 x bfloat> %69, i64 1
+  %78 = extractelement <2 x bfloat> %71, i64 0
+  %79 = extractelement <2 x bfloat> %71, i64 1
+  %80 = extractelement <2 x bfloat> %73, i64 0
+  %81 = extractelement <2 x bfloat> %73, i64 1
+  %82 = getelementptr [2 x i8], ptr addrspace(1) %1, i64 %60
+  %83 = tail call i16 asm sideeffect "mov.u16 $0, $1;\0A\09@$3 ld.global.b16 { $0 }, [ $2 + 0 ];", "=c,c,l,b"(i16 0, ptr addrspace(1) %82, i1 %62) #6
+  %84 = bitcast i16 %83 to bfloat
+  %85 = fpext bfloat %74 to float
+  %86 = fpext bfloat %75 to float
+  %87 = fpext bfloat %76 to float
+  %88 = fpext bfloat %77 to float
+  %89 = fpext bfloat %78 to float
+  %90 = fpext bfloat %79 to float
+  %91 = fpext bfloat %80 to float
+  %92 = fpext bfloat %81 to float
+  %93 = fpext bfloat %84 to float
+  tail call void @llvm.nvvm.barrier.cta.sync.aligned.all(i32 0)
+  %94 = bitcast float %93 to i32
+  tail call void @llvm.nvvm.stmatrix.sync.aligned.m8n8.x1.b16.p3(ptr addrspace(3) %35, i32 %94)
+  tail call void @llvm.nvvm.barrier.cta.sync.aligned.all(i32 0)
+  %95 = load float, ptr addrspace(3) %37, align 16
+  %96 = load float, ptr addrspace(3) %43, align 4
+  %97 = load float, ptr addrspace(3) %44, align 8
+  %98 = load float, ptr addrspace(3) %45, align 4
+  %99 = load float, ptr addrspace(3) %39, align 16
+  %100 = load float, ptr addrspace(3) %46, align 4
+  %101 = load float, ptr addrspace(3) %47, align 8
+  %102 = load float, ptr addrspace(3) %48, align 4
+  %103 = fmul float %95, %85
+  %104 = fmul float %96, %86
+  %105 = fmul float %97, %87
+  %106 = fmul float %98, %88
+  %107 = fmul float %99, %89
+  %108 = fmul float %100, %90
+  %109 = fmul float %101, %91
+  %110 = fmul float %102, %92
+  %111 = fadd float %50, %103
+  %112 = fadd float %51, %104
+  %113 = fadd float %52, %105
+  %114 = fadd float %53, %106
+  %115 = fadd float %54, %107
+  %116 = fadd float %55, %108
+  %117 = fadd float %56, %109
+  %118 = fadd float %57, %110
+  %indvars.iv.next = add nuw nsw i64 %indvars.iv, 1
+  %exitcond.not = icmp eq i64 %indvars.iv.next, %wide.trip.count
+  br i1 %exitcond.not, label %._crit_edge.loopexit, label %49
+
+._crit_edge.loopexit:                             ; preds = %49
+  %119 = fadd float %111, %112
+  %120 = fadd float %113, %114
+  %121 = fadd float %115, %116
+  %122 = fadd float %117, %118
+  %123 = fadd float %119, %120
+  %124 = fadd float %121, %122
+  %125 = fadd float %123, %124
+  br label %._crit_edge
+
+._crit_edge:                                      ; preds = %._crit_edge.loopexit, %.._crit_edge_crit_edge
+  %.pre-phi = phi i32 [ %.pre, %.._crit_edge_crit_edge ], [ %26, %._crit_edge.loopexit ]
+  %126 = phi float [ 0.000000e+00, %.._crit_edge_crit_edge ], [ %125, %._crit_edge.loopexit ]
+  %127 = and i32 %10, 7
+  %128 = or disjoint i32 %12, %127
+  %129 = icmp slt i32 %128, %4
+  %130 = bitcast float %126 to i32
+  %131 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %130, i32 8, i32 31)
+  %132 = bitcast i32 %131 to float
+  %133 = fadd float %126, %132
+  %134 = bitcast float %133 to i32
+  %135 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %134, i32 4, i32 31)
+  %136 = bitcast i32 %135 to float
+  %137 = fadd float %133, %136
+  %138 = bitcast float %137 to i32
+  %139 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %138, i32 2, i32 31)
+  %140 = bitcast i32 %139 to float
+  %141 = fadd float %137, %140
+  %142 = bitcast float %141 to i32
+  %143 = tail call i32 @llvm.nvvm.shfl.sync.bfly.i32(i32 -1, i32 %142, i32 1, i32 31)
+  %144 = bitcast i32 %143 to float
+  %145 = fadd float %141, %144
+  %146 = tail call i16 asm sideeffect "mov.u16 $0, 0x0;\0A\09ld.global.b16 { $0 }, [ $1 + 0 ];", "=c,l"(ptr addrspace(1) %2) #6
+  %147 = bitcast i16 %146 to bfloat
+  %148 = fpext bfloat %147 to float
+  %149 = fadd float %145, %148
+  %150 = sext i32 %128 to i64
+  %151 = getelementptr [2 x i8], ptr addrspace(1) %3, i64 %150
+  %152 = fptrunc float %149 to bfloat
+  tail call void @llvm.nvvm.barrier.cta.sync.aligned.all(i32 0)
+  %153 = and i32 %.pre-phi, 4
+  %154 = and i32 %13, 2
+  %155 = lshr i32 %10, 3
+  %156 = and i32 %155, 8
+  %157 = getelementptr inbounds nuw i8, ptr addrspace(3) @global_smem, i32 %153
+  %158 = getelementptr inbounds nuw i8, ptr addrspace(3) %157, i32 %154
+  %159 = getelementptr inbounds nuw i8, ptr addrspace(3) %158, i32 %156
+  store bfloat %152, ptr addrspace(3) %159, align 2
+  tail call void @llvm.nvvm.barrier.cta.sync.aligned.all(i32 0)
+  %160 = shl nuw nsw i32 %10, 1
+  %161 = and i32 %160, 8
+  %trunc = trunc i32 %10 to i3
+  %162 = and i3 %trunc, 3
+  %mask = tail call i3 @llvm.bitreverse.i3(i3 %162)
+  %163 = zext i3 %mask to i32
+  %164 = getelementptr inbounds nuw i8, ptr addrspace(3) @global_smem, i32 %161
+  %165 = getelementptr inbounds nuw i8, ptr addrspace(3) %164, i32 %163
+  %166 = load i16, ptr addrspace(3) %165, align 2
+  %167 = and i32 %10, 120
+  %168 = icmp eq i32 %167, 0
+  %169 = and i1 %168, %129
+  tail call void asm sideeffect "@$2 st.global.b16 [ $1 + 0 ], { $0 };", "c,l,b"(i16 %166, ptr addrspace(1) %151, i1 %169) #6
+  ret void
+}
+
+; Function Attrs: mustprogress nocallback nofree nosync nounwind speculatable willreturn memory(none)
+declare noundef range(i32 0, 1024) i32 @llvm.nvvm.read.ptx.sreg.tid.x() #1
+
+; Function Attrs: mustprogress nocallback nofree nosync nounwind speculatable willreturn memory(none)
+declare noundef range(i32 0, 2147483647) i32 @llvm.nvvm.read.ptx.sreg.ctaid.x() #1
+
+; Function Attrs: convergent nocallback nounwind memory(inaccessiblemem: readwrite)
+declare i32 @llvm.nvvm.shfl.sync.bfly.i32(i32, i32, i32, i32) #2
+
+; Function Attrs: convergent nocallback nounwind
+declare void @llvm.nvvm.barrier.cta.sync.aligned.all(i32) #3
+
+; Function Attrs: convergent nocallback nounwind memory(argmem: write)
+declare void @llvm.nvvm.stmatrix.sync.aligned.m8n8.x1.b16.p3(ptr addrspace(3) writeonly captures(none), i32) #4
+
+; Function Attrs: nocallback nocreateundeforpoison nofree nosync nounwind speculatable willreturn memory(none)
+declare i3 @llvm.bitreverse.i3(i3) #5
+
+attributes #0 = { nounwind "nvvm.reqntid"="128" }
+attributes #1 = { mustprogress nocallback nofree nosync nounwind speculatable willreturn memory(none) }
+attributes #2 = { convergent nocallback nounwind memory(inaccessiblemem: readwrite) }
+attributes #3 = { convergent nocallback nounwind }
+attributes #4 = { convergent nocallback nounwind memory(argmem: write) }
+attributes #5 = { nocallback nocreateundeforpoison nofree nosync nounwind speculatable willreturn memory(none) }
+attributes #6 = { nounwind }
+
+!llvm.module.flags = !{!41, !42}
+
+!41 = !{i32 2, !"Debug Info Version", i32 3}
+!42 = !{i32 4, !"nvvm-reflect-ftz", i32 1}

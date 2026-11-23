@@ -1,0 +1,47 @@
+module {
+  tt.func public @_reduce_split_k_kernel(%workspace_ptr: !tt.ptr<f32> {tt.divisibility = 16 : i32}, %c_ptr: !tt.ptr<f16> {tt.divisibility = 16 : i32}, %bias_ptr: !tt.ptr<f16> {tt.divisibility = 16 : i32}, %M: i32, %N: i32 {tt.divisibility = 16 : i32}, %ROWS_PER_SPLIT: i32 {tt.divisibility = 16 : i32}, %stride_bias: i32 {tt.divisibility = 16 : i32}) attributes {noinline = false} {
+    %cst = arith.constant dense<0.000000e+00> : tensor<16x128xf32>
+    %c128_i32 = arith.constant 128 : i32
+    %offs_m = arith.constant 16 : i32
+    %offs_m_0 = tt.get_program_id x : i32
+    %offs_m_1 = arith.muli %offs_m_0, %offs_m : i32
+    %offs_m_2 = tt.make_range {end = 16 : i32, start = 0 : i32} : tensor<16xi32>
+    %offs_m_3 = tt.splat %offs_m_1 : i32 -> tensor<16xi32>
+    %offs_m_4 = arith.addi %offs_m_3, %offs_m_2 : tensor<16xi32>
+    %offs_n = tt.get_program_id y : i32
+    %offs_n_5 = arith.muli %offs_n, %c128_i32 : i32
+    %offs_n_6 = tt.make_range {end = 128 : i32, start = 0 : i32} : tensor<128xi32>
+    %offs_n_7 = tt.splat %offs_n_5 : i32 -> tensor<128xi32>
+    %offs_n_8 = arith.addi %offs_n_7, %offs_n_6 : tensor<128xi32>
+    %mask = tt.expand_dims %offs_m_4 {axis = 1 : i32} : tensor<16xi32> -> tensor<16x1xi32>
+    %mask_9 = tt.splat %M : i32 -> tensor<16x1xi32>
+    %mask_10 = arith.cmpi slt, %mask, %mask_9 : tensor<16x1xi32>
+    %mask_11 = tt.expand_dims %offs_n_8 {axis = 0 : i32} : tensor<128xi32> -> tensor<1x128xi32>
+    %mask_12 = tt.splat %N : i32 -> tensor<1x128xi32>
+    %mask_13 = arith.cmpi slt, %mask_11, %mask_12 : tensor<1x128xi32>
+    %mask_14 = tt.broadcast %mask_10 : tensor<16x1xi1> -> tensor<16x128xi1>
+    %mask_15 = tt.broadcast %mask_13 : tensor<1x128xi1> -> tensor<16x128xi1>
+    %mask_16 = arith.andi %mask_14, %mask_15 : tensor<16x128xi1>
+    %offs = tt.splat %N : i32 -> tensor<16x1xi32>
+    %offs_17 = arith.muli %mask, %offs : tensor<16x1xi32>
+    %offs_18 = tt.broadcast %offs_17 : tensor<16x1xi32> -> tensor<16x128xi32>
+    %offs_19 = tt.broadcast %mask_11 : tensor<1x128xi32> -> tensor<16x128xi32>
+    %offs_20 = arith.addi %offs_18, %offs_19 : tensor<16x128xi32>
+    %0 = tt.elementwise_inline_asm "griddepcontrol.wait; mov.u32 $0, 0;" {constraints = "=r", packed_element = 1 : i32, pure = false} -> i32
+    %acc = tt.splat %workspace_ptr : !tt.ptr<f32> -> tensor<16x128x!tt.ptr<f32>>
+    %acc_21 = tt.addptr %acc, %offs_20 : tensor<16x128x!tt.ptr<f32>>, tensor<16x128xi32>
+    %acc_22 = tt.load %acc_21, %mask_16, %cst : tensor<16x128x!tt.ptr<f32>>
+    %acc_23 = arith.addf %acc_22, %cst : tensor<16x128xf32>
+    %acc_24 = arith.muli %ROWS_PER_SPLIT, %N : i32
+    %acc_25 = tt.addptr %workspace_ptr, %acc_24 : !tt.ptr<f32>, i32
+    %acc_26 = tt.splat %acc_25 : !tt.ptr<f32> -> tensor<16x128x!tt.ptr<f32>>
+    %acc_27 = tt.addptr %acc_26, %offs_20 : tensor<16x128x!tt.ptr<f32>>, tensor<16x128xi32>
+    %acc_28 = tt.load %acc_27, %mask_16, %cst : tensor<16x128x!tt.ptr<f32>>
+    %acc_29 = arith.addf %acc_23, %acc_28 : tensor<16x128xf32>
+    %1 = tt.splat %c_ptr : !tt.ptr<f16> -> tensor<16x128x!tt.ptr<f16>>
+    %2 = tt.addptr %1, %offs_20 : tensor<16x128x!tt.ptr<f16>>, tensor<16x128xi32>
+    %3 = arith.truncf %acc_29 : tensor<16x128xf32> to tensor<16x128xf16>
+    tt.store %2, %3, %mask_16 : tensor<16x128x!tt.ptr<f16>>
+    tt.return
+  }
+}

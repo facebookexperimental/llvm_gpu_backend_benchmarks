@@ -1,0 +1,131 @@
+#blocked = #ttg.blocked<{sizePerThread = [1], threadsPerWarp = [32], warpsPerCTA = [1], order = [0]}>
+#blocked1 = #ttg.blocked<{sizePerThread = [1, 1], threadsPerWarp = [1, 32], warpsPerCTA = [1, 1], order = [1, 0]}>
+module attributes {"ttg.cluster-dim-x" = 1 : i32, "ttg.cluster-dim-y" = 1 : i32, "ttg.cluster-dim-z" = 1 : i32, ttg.early_tma_store_lowering = true, ttg.min_reg_auto_ws = 24 : i32, "ttg.num-ctas" = 1 : i32, "ttg.num-warps" = 1 : i32, ttg.target = "cuda:90", "ttg.threads-per-warp" = 32 : i32, "ttng.two-ctas" = false} {
+  tt.func public @_schedule(%CuQ: !tt.ptr<i32> {tt.divisibility = 16 : i32}, %CuK: !tt.ptr<i32> {tt.divisibility = 16 : i32}, %Sched: !tt.ptr<i32> {tt.divisibility = 16 : i32}, %batch: i32, %H: i32) attributes {noinline = false} {
+    %c0_i32 = arith.constant 0 : i32
+    %c2_i32 = arith.constant 2 : i32
+    %c32_i32 = arith.constant 32 : i32
+    %c1_i32 = arith.constant 1 : i32
+    %cst = arith.constant dense<1> : tensor<32xi32, #blocked>
+    %cst_0 = arith.constant dense<0> : tensor<32xi32, #blocked>
+    %cst_1 = arith.constant dense<-1> : tensor<32xi32, #blocked>
+    %cst_2 = arith.constant dense<0> : tensor<32x32xi32, #blocked1>
+    %cst_3 = arith.constant dense<128> : tensor<32xi32, #blocked>
+    %cst_4 = arith.constant dense<127> : tensor<32xi32, #blocked>
+    tt.store %Sched, %c0_i32 : !tt.ptr<i32>
+    %seq = tt.addptr %Sched, %c2_i32 : !tt.ptr<i32>, i32
+    %first = tt.addptr %seq, %batch : !tt.ptr<i32>, i32
+    %0 = arith.cmpi sle, %batch, %c32_i32 : i32
+    scf.if %0 {
+      %i = tt.make_range {end = 32 : i32, start = 0 : i32} : tensor<32xi32, #blocked>
+      %ok = tt.splat %batch : i32 -> tensor<32xi32, #blocked>
+      %ok_5 = arith.cmpi slt, %i, %ok : tensor<32xi32, #blocked>
+      %q_len = tt.splat %CuQ : !tt.ptr<i32> -> tensor<32x!tt.ptr<i32>, #blocked>
+      %q_len_6 = tt.addptr %q_len, %i : tensor<32x!tt.ptr<i32>, #blocked>, tensor<32xi32, #blocked>
+      %q_len_7 = tt.addptr %q_len_6, %cst : tensor<32x!tt.ptr<i32>, #blocked>, tensor<32xi32, #blocked>
+      %q_len_8 = tt.load %q_len_7, %ok_5, %cst_0 : tensor<32x!tt.ptr<i32>, #blocked>
+      %q_len_9 = tt.load %q_len_6, %ok_5, %cst_0 : tensor<32x!tt.ptr<i32>, #blocked>
+      %q_len_10 = arith.subi %q_len_8, %q_len_9 : tensor<32xi32, #blocked>
+      %k_len = tt.splat %CuK : !tt.ptr<i32> -> tensor<32x!tt.ptr<i32>, #blocked>
+      %k_len_11 = tt.addptr %k_len, %i : tensor<32x!tt.ptr<i32>, #blocked>, tensor<32xi32, #blocked>
+      %k_len_12 = tt.addptr %k_len_11, %cst : tensor<32x!tt.ptr<i32>, #blocked>, tensor<32xi32, #blocked>
+      %k_len_13 = tt.load %k_len_12, %ok_5, %cst_0 : tensor<32x!tt.ptr<i32>, #blocked>
+      %k_len_14 = tt.load %k_len_11, %ok_5, %cst_0 : tensor<32x!tt.ptr<i32>, #blocked>
+      %k_len_15 = arith.subi %k_len_13, %k_len_14 : tensor<32xi32, #blocked>
+      %k_len_16 = arith.select %ok_5, %k_len_15, %cst_1 : tensor<32xi1, #blocked>, tensor<32xi32, #blocked>
+      %tiles = arith.addi %q_len_10, %cst_4 : tensor<32xi32, #blocked>
+      %tiles_17 = arith.divsi %tiles, %cst_3 : tensor<32xi32, #blocked>
+      %tiles_18 = tt.splat %H : i32 -> tensor<32xi32, #blocked>
+      %tiles_19 = arith.muli %tiles_18, %tiles_17 : tensor<32xi32, #blocked>
+      %ahead = ttg.convert_layout %k_len_16 : tensor<32xi32, #blocked> -> tensor<32xi32, #ttg.slice<{dim = 0, parent = #blocked1}>>
+      %ahead_20 = tt.expand_dims %ahead {axis = 0 : i32} : tensor<32xi32, #ttg.slice<{dim = 0, parent = #blocked1}>> -> tensor<1x32xi32, #blocked1>
+      %ahead_21 = ttg.convert_layout %k_len_16 : tensor<32xi32, #blocked> -> tensor<32xi32, #ttg.slice<{dim = 1, parent = #blocked1}>>
+      %ahead_22 = tt.expand_dims %ahead_21 {axis = 1 : i32} : tensor<32xi32, #ttg.slice<{dim = 1, parent = #blocked1}>> -> tensor<32x1xi32, #blocked1>
+      %ahead_23 = tt.broadcast %ahead_20 : tensor<1x32xi32, #blocked1> -> tensor<32x32xi32, #blocked1>
+      %ahead_24 = tt.broadcast %ahead_22 : tensor<32x1xi32, #blocked1> -> tensor<32x32xi32, #blocked1>
+      %ahead_25 = arith.cmpi sgt, %ahead_23, %ahead_24 : tensor<32x32xi32, #blocked1>
+      %ahead_26 = arith.cmpi eq, %ahead_23, %ahead_24 : tensor<32x32xi32, #blocked1>
+      %ahead_27 = tt.make_range {end = 32 : i32, start = 0 : i32} : tensor<32xi32, #ttg.slice<{dim = 0, parent = #blocked1}>>
+      %ahead_28 = tt.expand_dims %ahead_27 {axis = 0 : i32} : tensor<32xi32, #ttg.slice<{dim = 0, parent = #blocked1}>> -> tensor<1x32xi32, #blocked1>
+      %ahead_29 = tt.make_range {end = 32 : i32, start = 0 : i32} : tensor<32xi32, #ttg.slice<{dim = 1, parent = #blocked1}>>
+      %ahead_30 = tt.expand_dims %ahead_29 {axis = 1 : i32} : tensor<32xi32, #ttg.slice<{dim = 1, parent = #blocked1}>> -> tensor<32x1xi32, #blocked1>
+      %ahead_31 = tt.broadcast %ahead_28 : tensor<1x32xi32, #blocked1> -> tensor<32x32xi32, #blocked1>
+      %ahead_32 = tt.broadcast %ahead_30 : tensor<32x1xi32, #blocked1> -> tensor<32x32xi32, #blocked1>
+      %ahead_33 = arith.cmpi slt, %ahead_31, %ahead_32 : tensor<32x32xi32, #blocked1>
+      %ahead_34 = arith.andi %ahead_26, %ahead_33 : tensor<32x32xi1, #blocked1>
+      %ahead_35 = arith.ori %ahead_25, %ahead_34 : tensor<32x32xi1, #blocked1>
+      %rank = arith.extui %ahead_35 : tensor<32x32xi1, #blocked1> to tensor<32x32xi32, #blocked1>
+      %rank_36 = "tt.reduce"(%rank) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+      ^bb0(%rank_37: i32, %rank_38: i32):
+        %rank_39 = arith.addi %rank_37, %rank_38 : i32
+        tt.reduce.return %rank_39 : i32
+      }) : (tensor<32x32xi32, #blocked1>) -> tensor<32xi32, #ttg.slice<{dim = 1, parent = #blocked1}>>
+      %1 = ttg.convert_layout %rank_36 : tensor<32xi32, #ttg.slice<{dim = 1, parent = #blocked1}>> -> tensor<32xi32, #blocked>
+      %2 = tt.splat %seq : !tt.ptr<i32> -> tensor<32x!tt.ptr<i32>, #blocked>
+      %3 = tt.addptr %2, %1 : tensor<32x!tt.ptr<i32>, #blocked>, tensor<32xi32, #blocked>
+      tt.store %3, %i, %ok_5 : tensor<32x!tt.ptr<i32>, #blocked>
+      %4 = tt.splat %first : !tt.ptr<i32> -> tensor<32x!tt.ptr<i32>, #blocked>
+      %5 = tt.addptr %4, %1 : tensor<32x!tt.ptr<i32>, #blocked>, tensor<32xi32, #blocked>
+      %6 = ttg.convert_layout %tiles_19 : tensor<32xi32, #blocked> -> tensor<32xi32, #ttg.slice<{dim = 0, parent = #blocked1}>>
+      %7 = tt.expand_dims %6 {axis = 0 : i32} : tensor<32xi32, #ttg.slice<{dim = 0, parent = #blocked1}>> -> tensor<1x32xi32, #blocked1>
+      %8 = tt.broadcast %7 : tensor<1x32xi32, #blocked1> -> tensor<32x32xi32, #blocked1>
+      %9 = arith.select %ahead_35, %8, %cst_2 : tensor<32x32xi1, #blocked1>, tensor<32x32xi32, #blocked1>
+      %10 = "tt.reduce"(%9) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+      ^bb0(%arg5: i32, %arg6: i32):
+        %14 = arith.addi %arg5, %arg6 : i32
+        tt.reduce.return %14 : i32
+      }) : (tensor<32x32xi32, #blocked1>) -> tensor<32xi32, #ttg.slice<{dim = 1, parent = #blocked1}>>
+      %11 = ttg.convert_layout %10 : tensor<32xi32, #ttg.slice<{dim = 1, parent = #blocked1}>> -> tensor<32xi32, #blocked>
+      tt.store %5, %11, %ok_5 : tensor<32x!tt.ptr<i32>, #blocked>
+      %12 = tt.addptr %Sched, %c1_i32 : !tt.ptr<i32>, i32
+      %13 = "tt.reduce"(%tiles_19) <{axis = 0 : i32, reduction_ordering = "unordered"}> ({
+      ^bb0(%arg5: i32, %arg6: i32):
+        %14 = arith.addi %arg5, %arg6 : i32
+        tt.reduce.return %14 : i32
+      }) : (tensor<32xi32, #blocked>) -> i32
+      tt.store %12, %13 : !tt.ptr<i32>
+    } else {
+      %i = tt.make_range {end = 32 : i32, start = 0 : i32} : tensor<32xi32, #blocked>
+      %ok = tt.splat %batch : i32 -> tensor<32xi32, #blocked>
+      %tiles = tt.splat %CuQ : !tt.ptr<i32> -> tensor<32x!tt.ptr<i32>, #blocked>
+      %tiles_5 = tt.splat %H : i32 -> tensor<32xi32, #blocked>
+      %1 = tt.splat %seq : !tt.ptr<i32> -> tensor<32x!tt.ptr<i32>, #blocked>
+      %2 = tt.splat %first : !tt.ptr<i32> -> tensor<32x!tt.ptr<i32>, #blocked>
+      %total = scf.for %c = %c0_i32 to %batch step %c32_i32 iter_args(%total_6 = %c0_i32) -> (i32)  : i32 {
+        %i_7 = tt.splat %c : i32 -> tensor<32xi32, #blocked>
+        %i_8 = arith.addi %i_7, %i : tensor<32xi32, #blocked>
+        %ok_9 = arith.cmpi slt, %i_8, %ok : tensor<32xi32, #blocked>
+        %tiles_10 = tt.addptr %tiles, %i_8 : tensor<32x!tt.ptr<i32>, #blocked>, tensor<32xi32, #blocked>
+        %tiles_11 = tt.addptr %tiles_10, %cst : tensor<32x!tt.ptr<i32>, #blocked>, tensor<32xi32, #blocked>
+        %tiles_12 = tt.load %tiles_11, %ok_9, %cst_0 : tensor<32x!tt.ptr<i32>, #blocked>
+        %tiles_13 = tt.load %tiles_10, %ok_9, %cst_0 : tensor<32x!tt.ptr<i32>, #blocked>
+        %tiles_14 = arith.subi %tiles_12, %tiles_13 : tensor<32xi32, #blocked>
+        %tiles_15 = arith.addi %tiles_14, %cst_4 : tensor<32xi32, #blocked>
+        %tiles_16 = arith.divsi %tiles_15, %cst_3 : tensor<32xi32, #blocked>
+        %tiles_17 = arith.muli %tiles_5, %tiles_16 : tensor<32xi32, #blocked>
+        %4 = tt.addptr %1, %i_8 : tensor<32x!tt.ptr<i32>, #blocked>, tensor<32xi32, #blocked>
+        tt.store %4, %i_8, %ok_9 : tensor<32x!tt.ptr<i32>, #blocked>
+        %5 = tt.addptr %2, %i_8 : tensor<32x!tt.ptr<i32>, #blocked>, tensor<32xi32, #blocked>
+        %6 = "tt.scan"(%tiles_17) <{axis = 0 : i32, reverse = false}> ({
+        ^bb0(%arg7: i32, %arg8: i32):
+          %10 = arith.addi %arg7, %arg8 : i32
+          tt.scan.return %10 : i32
+        }) : (tensor<32xi32, #blocked>) -> tensor<32xi32, #blocked>
+        %7 = tt.splat %total_6 : i32 -> tensor<32xi32, #blocked>
+        %8 = arith.addi %7, %6 : tensor<32xi32, #blocked>
+        %9 = arith.subi %8, %tiles_17 : tensor<32xi32, #blocked>
+        tt.store %5, %9, %ok_9 : tensor<32x!tt.ptr<i32>, #blocked>
+        %total_18 = "tt.reduce"(%tiles_17) <{axis = 0 : i32, reduction_ordering = "unordered"}> ({
+        ^bb0(%total_20: i32, %total_21: i32):
+          %total_22 = arith.addi %total_20, %total_21 : i32
+          tt.reduce.return %total_22 : i32
+        }) : (tensor<32xi32, #blocked>) -> i32
+        %total_19 = arith.addi %total_6, %total_18 : i32
+        scf.yield %total_19 : i32
+      }
+      %3 = tt.addptr %Sched, %c1_i32 : !tt.ptr<i32>, i32
+      tt.store %3, %total : !tt.ptr<i32>
+    }
+    tt.return
+  }
+}

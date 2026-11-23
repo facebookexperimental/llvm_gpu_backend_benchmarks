@@ -1,0 +1,68 @@
+module {
+  tt.func public @addmm_kernel_gemv(%a_ptr: !tt.ptr<bf16> {tt.divisibility = 16 : i32}, %b_ptr: !tt.ptr<bf16> {tt.divisibility = 16 : i32}, %bias_ptr: !tt.ptr<bf16> {tt.divisibility = 16 : i32}, %c_ptr: !tt.ptr<bf16> {tt.divisibility = 16 : i32}, %M: i32, %K: i32 {tt.divisibility = 16 : i32}, %stride_am: i32 {tt.divisibility = 16 : i32}) attributes {noinline = false} {
+    %c127_i32 = arith.constant 127 : i32
+    %acc = arith.constant dense<0.000000e+00> : tensor<16x128xf32>
+    %cst = arith.constant dense<0.000000e+00> : tensor<128xbf16>
+    %cst_0 = arith.constant dense<0.000000e+00> : tensor<16x128xbf16>
+    %c1_i32 = arith.constant 1 : i32
+    %c0_i32 = arith.constant 0 : i32
+    %c128_i32 = arith.constant 128 : i32
+    %rows = arith.constant 16 : i32
+    %rows_1 = tt.get_program_id x : i32
+    %rows_2 = arith.muli %rows_1, %rows : i32
+    %rows_3 = tt.make_range {end = 16 : i32, start = 0 : i32} : tensor<16xi32>
+    %rows_4 = tt.splat %rows_2 : i32 -> tensor<16xi32>
+    %rows_5 = arith.addi %rows_4, %rows_3 : tensor<16xi32>
+    %row_mask = tt.splat %M : i32 -> tensor<16xi32>
+    %row_mask_6 = arith.cmpi slt, %rows_5, %row_mask : tensor<16xi32>
+    %0 = arith.addi %K, %c127_i32 : i32
+    %1 = arith.divsi %0, %c128_i32 : i32
+    %cols = tt.make_range {end = 128 : i32, start = 0 : i32} : tensor<128xi32>
+    %col_mask = tt.splat %K : i32 -> tensor<128xi32>
+    %a = tt.expand_dims %row_mask_6 {axis = 1 : i32} : tensor<16xi1> -> tensor<16x1xi1>
+    %a_7 = tt.broadcast %a : tensor<16x1xi1> -> tensor<16x128xi1>
+    %a_8 = tt.expand_dims %rows_5 {axis = 1 : i32} : tensor<16xi32> -> tensor<16x1xi32>
+    %a_9 = tt.splat %stride_am : i32 -> tensor<16x1xi32>
+    %a_10 = arith.muli %a_8, %a_9 : tensor<16x1xi32>
+    %a_11 = tt.splat %a_ptr : !tt.ptr<bf16> -> tensor<16x1x!tt.ptr<bf16>>
+    %a_12 = tt.addptr %a_11, %a_10 : tensor<16x1x!tt.ptr<bf16>>, tensor<16x1xi32>
+    %a_13 = tt.broadcast %a_12 : tensor<16x1x!tt.ptr<bf16>> -> tensor<16x128x!tt.ptr<bf16>>
+    %w = tt.splat %b_ptr : !tt.ptr<bf16> -> tensor<128x!tt.ptr<bf16>>
+    %acc_14 = scf.for %k = %c0_i32 to %1 step %c1_i32 iter_args(%acc_19 = %acc) -> (tensor<16x128xf32>)  : i32 {
+      %cols_20 = arith.muli %k, %c128_i32 : i32
+      %cols_21 = tt.splat %cols_20 : i32 -> tensor<128xi32>
+      %cols_22 = arith.addi %cols_21, %cols : tensor<128xi32>
+      %col_mask_23 = arith.cmpi slt, %cols_22, %col_mask : tensor<128xi32>
+      %a_24 = tt.expand_dims %col_mask_23 {axis = 0 : i32} : tensor<128xi1> -> tensor<1x128xi1>
+      %a_25 = tt.broadcast %a_24 : tensor<1x128xi1> -> tensor<16x128xi1>
+      %a_26 = arith.andi %a_7, %a_25 : tensor<16x128xi1>
+      %a_27 = tt.expand_dims %cols_22 {axis = 0 : i32} : tensor<128xi32> -> tensor<1x128xi32>
+      %a_28 = tt.broadcast %a_27 : tensor<1x128xi32> -> tensor<16x128xi32>
+      %a_29 = tt.addptr %a_13, %a_28 : tensor<16x128x!tt.ptr<bf16>>, tensor<16x128xi32>
+      %a_30 = tt.load %a_29, %a_26, %cst_0 : tensor<16x128x!tt.ptr<bf16>>
+      %w_31 = tt.addptr %w, %cols_22 : tensor<128x!tt.ptr<bf16>>, tensor<128xi32>
+      %w_32 = tt.load %w_31, %col_mask_23, %cst : tensor<128x!tt.ptr<bf16>>
+      %acc_33 = arith.extf %a_30 : tensor<16x128xbf16> to tensor<16x128xf32>
+      %acc_34 = arith.extf %w_32 : tensor<128xbf16> to tensor<128xf32>
+      %acc_35 = tt.expand_dims %acc_34 {axis = 0 : i32} : tensor<128xf32> -> tensor<1x128xf32>
+      %acc_36 = tt.broadcast %acc_35 : tensor<1x128xf32> -> tensor<16x128xf32>
+      %acc_37 = arith.mulf %acc_33, %acc_36 : tensor<16x128xf32>
+      %acc_38 = arith.addf %acc_19, %acc_37 : tensor<16x128xf32>
+      scf.yield %acc_38 : tensor<16x128xf32>
+    }
+    %out = "tt.reduce"(%acc_14) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%out_19: f32, %out_20: f32):
+      %out_21 = arith.addf %out_19, %out_20 : f32
+      tt.reduce.return %out_21 : f32
+    }) : (tensor<16x128xf32>) -> tensor<16xf32>
+    %out_15 = tt.load %bias_ptr : !tt.ptr<bf16>
+    %out_16 = arith.extf %out_15 : bf16 to f32
+    %out_17 = tt.splat %out_16 : f32 -> tensor<16xf32>
+    %out_18 = arith.addf %out, %out_17 : tensor<16xf32>
+    %2 = tt.splat %c_ptr : !tt.ptr<bf16> -> tensor<16x!tt.ptr<bf16>>
+    %3 = tt.addptr %2, %rows_5 : tensor<16x!tt.ptr<bf16>>, tensor<16xi32>
+    %4 = arith.truncf %out_18 : tensor<16xf32> to tensor<16xbf16>
+    tt.store %3, %4, %row_mask_6 : tensor<16x!tt.ptr<bf16>>
+    tt.return
+  }
+}
