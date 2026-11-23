@@ -35,6 +35,17 @@ _ASM_SKIP_RE = re.compile(r"^\s*\.(Lfunc_begin|Lline_table)")
 _KERNEL_RE = re.compile(r"define amdgpu_kernel void @([a-zA-Z_][a-zA-Z0-9_]*)")
 _PTX_KERNEL_RE = re.compile(r"define ptx_kernel void @([a-zA-Z_][a-zA-Z0-9_]*)")
 
+# Assembled from pieces so this hand-written file does not carry the
+# token and get classified as generated itself.
+_GENERATED_TOKEN = "@" + "generated"
+_KERNEL_FILES = (
+    "kernel.ttir",
+    "kernel.ttgir",
+    "kernel.llir",
+    "kernel.amdgcn",
+    "kernel.ptx",
+)
+
 
 def _repo_rel(path: str) -> str:
     """Normalize a path to repo-relative form for scope checks."""
@@ -103,6 +114,13 @@ def _amdgcn_loc_problems(filename: str, text: str) -> list[str]:
         ):
             problems.append(f"{filename}:{i}: assembler loc/debug line")
     return problems
+
+
+def find_generated_problems(filename: str, text: str) -> list[str]:
+    """Return a problem when an exported kernel file lacks the marker."""
+    if filename in _KERNEL_FILES and _GENERATED_TOKEN not in text:
+        return [f"{filename}: missing generated-file marker"]
+    return []
 
 
 def find_loc_problems(filename: str, text: str) -> list[str]:
@@ -279,18 +297,14 @@ def validate_tree(out_root: str, arch: str, source: str = "", target: str = "") 
     for s, t, case, cdir in _iter_case_dirs(out_root, arch, source, target):
         name = f"{s}/{t}/{case}"
         problems = []
-        for filename in (
-            "kernel.ttir",
-            "kernel.ttgir",
-            "kernel.llir",
-            "kernel.amdgcn",
-            "kernel.ptx",
-        ):
+        for filename in _KERNEL_FILES:
             fpath = os.path.join(cdir, filename)
             if not os.path.isfile(fpath):
                 continue
             with open(fpath) as f:
-                problems.extend(find_loc_problems(filename, f.read()))
+                text = f.read()
+            problems.extend(find_loc_problems(filename, text))
+            problems.extend(find_generated_problems(filename, text))
         llir_path = os.path.join(cdir, "kernel.llir")
         if os.path.isfile(llir_path):
             with open(llir_path) as f:

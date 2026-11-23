@@ -3,6 +3,7 @@
 """Tests for launch_hip.py (pure helpers + fake-HIP replay) and capture recording."""
 
 import ctypes
+import hashlib
 import json
 import os
 import sys
@@ -14,6 +15,7 @@ try:
     from triton.benchmarks.tools.capture import (
         bind_launch_args,
         eval_grid,
+        mark_generated,
         record_launch,
         write_case,
     )
@@ -27,7 +29,13 @@ try:
 except ImportError:
     # Plain python3: sibling files in the same directory.
     # pyrefly: ignore [missing-import]
-    from capture import bind_launch_args, eval_grid, record_launch, write_case
+    from capture import (
+        bind_launch_args,
+        eval_grid,
+        mark_generated,
+        record_launch,
+        write_case,
+    )
 
     # pyrefly: ignore [missing-import]
     from launch_hip import (
@@ -377,6 +385,43 @@ class WriteCaseTest(unittest.TestCase):
                 tmp, kernel, target="t", case="c", arch="gfx950", source="s"
             )
         self.assertIsNone(entry["launch"])
+
+    def test_mark_generated_prefixes_each_stage(self) -> None:
+        token = "@" + "generated"
+        expected = {
+            "llir": ";",
+            "ttgir": "//",
+            "ttir": "//",
+            "amdgcn": ";",
+            "ptx": "//",
+        }
+        for stage, prefix in expected.items():
+            marked = mark_generated(stage, "body\n")
+            self.assertTrue(marked.startswith(f"{prefix} {token} "))
+            self.assertTrue(marked.endswith("body\n"))
+            self.assertEqual(mark_generated(stage, marked), marked)
+
+    def test_write_case_marks_files_and_hashes_marked_text(self) -> None:
+        token = "@" + "generated"
+        asm = {
+            "llir": "; ModuleID = 'k'\n",
+            "ttgir": "module {\n}\n",
+            "ttir": "module {\n}\n",
+            "amdgcn": "\t.text\n",
+            "ptx": "\t.version 8.0\n",
+        }
+        kernel = types.SimpleNamespace(asm=asm, name="k")
+        with tempfile.TemporaryDirectory() as tmp:
+            entry = write_case(
+                tmp, kernel, target="t", case="c", arch="gfx950", source="s"
+            )
+            for stage, original in asm.items():
+                with open(os.path.join(tmp, f"kernel.{stage}")) as f:
+                    text = f.read()
+                self.assertIn(token, text)
+                self.assertTrue(text.endswith(original))
+                digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+                self.assertEqual(entry["files"][stage]["sha256"], digest)
 
 
 class _ReplayTensor:

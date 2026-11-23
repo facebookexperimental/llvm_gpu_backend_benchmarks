@@ -21,7 +21,11 @@ except ImportError:
     # pyrefly: ignore [missing-import]
     from prune_loc import main, prune_tree, strip_amdgcn, strip_llir, strip_mlir
 
-_MLIR = """\
+_TOKEN = "@" + "generated"
+
+_MLIR = (
+    f"// {_TOKEN} by triton.benchmarks.tools.capture; do not edit.\n"
+    + """\
 #loc = loc("/data/buck-out/hash/link-tree/kernels/mm/gfx950.py":424:1)
 #loc1 = loc(unknown)
 #loc2 = loc(callsite(#loc at #loc1))
@@ -32,8 +36,11 @@ module {
   }
 }
 """
+)
 
-_LLIR = """\
+_LLIR = (
+    f"; {_TOKEN} by triton.benchmarks.tools.capture; do not edit.\n"
+    + """\
 ; ModuleID = 'LLVMDialectModule'
 source_filename = "LLVMDialectModule"
 target triple = "amdgcn-amd-amdhsa"
@@ -51,8 +58,11 @@ define amdgpu_kernel void @k(ptr %a) !dbg !10 {
 !10 = distinct !DISubprogram(name: "k", file: !1)
 !11 = !DILocation(line: 424, column: 1, scope: !10)
 """
+)
 
-_AMDGCN = """\
+_AMDGCN = (
+    f"; {_TOKEN} by triton.benchmarks.tools.capture; do not edit.\n"
+    + """\
 \t.amdgcn_target "amdgpu9.50-amd-amdhsa-unknown-gfx950"
 \t.text
 \t.file\t1 "/data/buck-out/hash/mm/gfx950.py"
@@ -67,11 +77,13 @@ k:
 .Lline_table_start0:
 \t.byte\t1
 """
+)
 
 
 class StripTest(unittest.TestCase):
     def test_mlir(self) -> None:
         out = strip_mlir(_MLIR)
+        self.assertIn(_TOKEN, out)
         self.assertNotIn("loc(", out)
         self.assertIn("tt.func public @k(%a: !tt.ptr<i64>)", out)
         self.assertIn("%c = arith.constant 128 : i32", out)
@@ -79,6 +91,7 @@ class StripTest(unittest.TestCase):
 
     def test_llir(self) -> None:
         out = strip_llir(_LLIR)
+        self.assertIn(_TOKEN, out)
         self.assertNotIn("!dbg", out)
         self.assertNotIn("!DI", out)
         self.assertNotIn("!3", out)
@@ -91,6 +104,7 @@ class StripTest(unittest.TestCase):
 
     def test_amdgcn(self) -> None:
         out = strip_amdgcn(_AMDGCN)
+        self.assertIn(_TOKEN, out)
         self.assertNotIn(".loc", out)
         self.assertNotIn(".file", out)
         self.assertNotIn(".cfi", out)

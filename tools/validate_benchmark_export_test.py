@@ -13,6 +13,7 @@ try:
         check_benchmark_only,
         check_hashes,
         check_llir_structure,
+        find_generated_problems,
         find_loc_problems,
         main,
         validate_tree,
@@ -24,12 +25,17 @@ except ImportError:
         check_benchmark_only,
         check_hashes,
         check_llir_structure,
+        find_generated_problems,
         find_loc_problems,
         main,
         validate_tree,
     )
 
-_CLEAN_LLIR = """\
+_TOKEN = "@" + "generated"
+
+_CLEAN_LLIR = (
+    f"; {_TOKEN} by triton.benchmarks.tools.capture; do not edit.\n"
+    + """\
 ; ModuleID = 'LLVMDialectModule'
 source_filename = "LLVMDialectModule"
 target triple = "amdgcn-amd-amdhsa"
@@ -41,16 +47,18 @@ define amdgpu_kernel void @k(ptr %a) {
 !llvm.module.flags = !{!0}
 !0 = !{i32 2, !"Debug Info Version", i32 3}
 """
+)
 
 _DIRTY_LLIR = _CLEAN_LLIR + '!1 = !DIFile(filename: "gfx942.py", directory: "/tmp")\n'
 
-_CLEAN_TTIR = """\
-module {
-  tt.func public @k(%a: !tt.ptr<i64>) {
+_CLEAN_TTIR = f"""\
+// {_TOKEN} by triton.benchmarks.tools.capture; do not edit.
+module {{
+  tt.func public @k(%a: !tt.ptr<i64>) {{
     %c = arith.constant 128 : i32
     tt.return
-  }
-}
+  }}
+}}
 """
 
 
@@ -65,7 +73,7 @@ def _write_case(root: str, llir: str = _CLEAN_LLIR) -> str:
         "kernel.ttir": _CLEAN_TTIR,
         "kernel.ttgir": _CLEAN_TTIR,
         "kernel.llir": llir,
-        "kernel.amdgcn": "\t.text\n\ts_mov_b32 s0, 0\n",
+        "kernel.amdgcn": f"; {_TOKEN} by triton.benchmarks.tools.capture\n\t.text\n\ts_mov_b32 s0, 0\n",
     }
     compile_info = {
         "arch": "gfx942",
@@ -118,6 +126,23 @@ class GateTest(unittest.TestCase):
     def test_llir_structure(self) -> None:
         self.assertEqual(check_llir_structure(_CLEAN_LLIR), [])
         self.assertTrue(check_llir_structure("not ir at all"))
+
+    def test_generated_marker_detection(self) -> None:
+        self.assertEqual(find_generated_problems("kernel.llir", _CLEAN_LLIR), [])
+        self.assertTrue(find_generated_problems("kernel.llir", "; ModuleID = 'x'\n"))
+        self.assertEqual(find_generated_problems("compile.json", "{}"), [])
+
+    def test_unmarked_kernel_fails_tree(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _write_case(tmp, llir=_CLEAN_LLIR.replace(_TOKEN, "plain"))
+            report = validate_tree(tmp, "gfx942", "tlx_ops", "mm")
+            self.assertEqual(report["ok"], 0)
+            self.assertTrue(
+                any(
+                    "missing generated" in problem
+                    for problem in report["failures"]["tlx_ops/mm/case1"]
+                )
+            )
 
     def test_tree_and_hashes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

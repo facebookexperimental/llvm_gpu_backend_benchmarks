@@ -42,6 +42,29 @@ MANIFEST_VERSION = 1
 # produces its own, so cases carry exactly one of them.
 STAGES = ("llir", "ttgir", "ttir", "amdgcn", "ptx")
 
+# Phabricator treats a file as generated when its content carries this
+# token. Assemble it from pieces so this hand-written file does not carry
+# it and get classified as generated itself.
+GENERATED_TOKEN = "@" + "generated"
+_COMMENT_PREFIX = {
+    "llir": ";",
+    "ttgir": "//",
+    "ttir": "//",
+    "amdgcn": ";",
+    "ptx": "//",
+}
+
+
+def mark_generated(stage: str, text: str) -> str:
+    """Return artifact text prefixed with the generated-file marker."""
+    if GENERATED_TOKEN in text:
+        return text
+    header = (
+        f"{_COMMENT_PREFIX[stage]} {GENERATED_TOKEN} "
+        "by triton.benchmarks.tools.capture; do not edit.\n"
+    )
+    return header + text
+
 
 def case_dir(out_root: str, arch: str, source: str, target: str, case: str) -> str:
     """Hardware-sorted output directory for one compiled kernel case."""
@@ -439,9 +462,10 @@ def write_case(
     for stage in STAGES:
         if stage in asm and isinstance(asm[stage], str):
             fname = f"kernel.{stage}"
+            text = mark_generated(stage, asm[stage])
             with open(os.path.join(out_dir, fname), "w") as f:
-                f.write(asm[stage])
-            files[stage] = {"file": fname, "sha256": sha256_text(asm[stage])}
+                f.write(text)
+            files[stage] = {"file": fname, "sha256": sha256_text(text)}
     desc = describe_compiled(kernel)
     entry = {
         "manifest_version": MANIFEST_VERSION,
