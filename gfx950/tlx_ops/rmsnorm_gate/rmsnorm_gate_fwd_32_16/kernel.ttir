@@ -1,0 +1,90 @@
+module attributes {"ttg.cluster-dim-x" = 1 : i32, "ttg.cluster-dim-y" = 1 : i32, "ttg.cluster-dim-z" = 1 : i32} {
+  tt.func public @_kernel(%X: !tt.ptr<bf16> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %G: !tt.ptr<bf16> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %Y: !tt.ptr<bf16> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %eps: f32, %T: i32 {tt.divisibility = 16 : i32}, %stride_x: i32 {tt.divisibility = 16 : i32}, %stride_g: i32 {tt.divisibility = 16 : i32}, %stride_y: i32 {tt.divisibility = 16 : i32}) attributes {noinline = false} {
+    %cst = arith.constant dense<64> : tensor<8x1x1xi32>
+    %cst_0 = arith.constant dense<2> : tensor<1x32x1xi32>
+    %cst_1 = arith.constant dense<6.400000e+01> : tensor<8xf32>
+    %cst_2 = arith.constant dense<1.000000e+00> : tensor<8xf32>
+    %cst_3 = arith.constant dense<0.000000e+00> : tensor<8x32x2xbf16>
+    %cst_4 = arith.constant dense<1.000000e+00> : tensor<8x32x2xf32>
+    %c2_i32 = arith.constant 2 : i32
+    %c8_i32 = arith.constant 8 : i32
+    %pid = tt.get_program_id x : i32
+    %0 = arith.remsi %pid, %c8_i32 : i32
+    %1 = arith.cmpi slt, %0, %c2_i32 : i32
+    scf.if %1 {
+      %2 = arith.divsi %pid, %c8_i32 : i32
+      %3 = arith.muli %2, %c2_i32 : i32
+      %4 = arith.addi %3, %0 : i32
+      %tok = arith.divsi %4, %c2_i32 : i32
+      %mask = arith.cmpi slt, %tok, %T : i32
+      %col = arith.remsi %4, %c2_i32 : i32
+      %col_5 = arith.muli %col, %c8_i32 : i32
+      %col_6 = tt.make_range {end = 8 : i32, start = 0 : i32} : tensor<8xi32>
+      %col_7 = tt.splat %col_5 : i32 -> tensor<8xi32>
+      %col_8 = arith.addi %col_7, %col_6 : tensor<8xi32>
+      %col_9 = tt.expand_dims %col_8 {axis = 1 : i32} : tensor<8xi32> -> tensor<8x1xi32>
+      %col_10 = tt.expand_dims %col_9 {axis = 2 : i32} : tensor<8x1xi32> -> tensor<8x1x1xi32>
+      %col_11 = arith.muli %col_10, %cst : tensor<8x1x1xi32>
+      %col_12 = tt.make_range {end = 32 : i32, start = 0 : i32} : tensor<32xi32>
+      %col_13 = tt.expand_dims %col_12 {axis = 0 : i32} : tensor<32xi32> -> tensor<1x32xi32>
+      %col_14 = tt.expand_dims %col_13 {axis = 2 : i32} : tensor<1x32xi32> -> tensor<1x32x1xi32>
+      %col_15 = arith.muli %col_14, %cst_0 : tensor<1x32x1xi32>
+      %col_16 = tt.broadcast %col_11 : tensor<8x1x1xi32> -> tensor<8x32x1xi32>
+      %col_17 = tt.broadcast %col_15 : tensor<1x32x1xi32> -> tensor<8x32x1xi32>
+      %col_18 = arith.addi %col_16, %col_17 : tensor<8x32x1xi32>
+      %col_19 = tt.make_range {end = 2 : i32, start = 0 : i32} : tensor<2xi32>
+      %col_20 = tt.expand_dims %col_19 {axis = 0 : i32} : tensor<2xi32> -> tensor<1x2xi32>
+      %col_21 = tt.expand_dims %col_20 {axis = 1 : i32} : tensor<1x2xi32> -> tensor<1x1x2xi32>
+      %col_22 = tt.broadcast %col_18 : tensor<8x32x1xi32> -> tensor<8x32x2xi32>
+      %col_23 = tt.broadcast %col_21 : tensor<1x1x2xi32> -> tensor<8x32x2xi32>
+      %col_24 = arith.addi %col_22, %col_23 : tensor<8x32x2xi32>
+      %x = arith.muli %tok, %stride_x : i32
+      %x_25 = tt.addptr %X, %x : !tt.ptr<bf16>, i32
+      %x_26 = tt.splat %x_25 : !tt.ptr<bf16> -> tensor<8x32x2x!tt.ptr<bf16>>
+      %x_27 = tt.addptr %x_26, %col_24 : tensor<8x32x2x!tt.ptr<bf16>>, tensor<8x32x2xi32>
+      %x_28 = tt.splat %mask : i1 -> tensor<8x32x2xi1>
+      %x_29 = tt.load %x_27, %x_28, %cst_3 : tensor<8x32x2x!tt.ptr<bf16>>
+      %x_30 = arith.extf %x_29 : tensor<8x32x2xbf16> to tensor<8x32x2xf32>
+      %g = arith.muli %tok, %stride_g : i32
+      %g_31 = tt.addptr %G, %g : !tt.ptr<bf16>, i32
+      %g_32 = tt.splat %g_31 : !tt.ptr<bf16> -> tensor<8x32x2x!tt.ptr<bf16>>
+      %g_33 = tt.addptr %g_32, %col_24 : tensor<8x32x2x!tt.ptr<bf16>>, tensor<8x32x2xi32>
+      %g_34 = tt.load %g_33, %x_28, %cst_3 : tensor<8x32x2x!tt.ptr<bf16>>
+      %g_35 = arith.extf %g_34 : tensor<8x32x2xbf16> to tensor<8x32x2xf32>
+      %pairs = arith.mulf %x_30, %x_30 : tensor<8x32x2xf32>
+      %pairs_36 = tt.reshape %pairs : tensor<8x32x2xf32> -> tensor<8x32x1x2xf32>
+      %pairs_37 = "tt.reduce"(%pairs_36) <{axis = 3 : i32, reduction_ordering = "unordered"}> ({
+      ^bb0(%pairs_50: f32, %pairs_51: f32):
+        %pairs_52 = arith.addf %pairs_50, %pairs_51 : f32
+        tt.reduce.return %pairs_52 : f32
+      }) : (tensor<8x32x1x2xf32>) -> tensor<8x32x1xf32>
+      %folded = "tt.reduce"(%pairs_37) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+      ^bb0(%folded_50: f32, %folded_51: f32):
+        %folded_52 = arith.addf %folded_50, %folded_51 : f32
+        tt.reduce.return %folded_52 : f32
+      }) : (tensor<8x32x1xf32>) -> tensor<8x1xf32>
+      %sum_sq = tt.reshape %folded : tensor<8x1xf32> -> tensor<8xf32>
+      %rstd = arith.divf %sum_sq, %cst_1 : tensor<8xf32>
+      %rstd_38 = tt.splat %eps : f32 -> tensor<8xf32>
+      %rstd_39 = arith.addf %rstd, %rstd_38 : tensor<8xf32>
+      %rstd_40 = math.sqrt %rstd_39 : tensor<8xf32>
+      %rstd_41 = arith.divf %cst_2, %rstd_40 : tensor<8xf32>
+      %y = tt.expand_dims %rstd_41 {axis = 1 : i32} : tensor<8xf32> -> tensor<8x1xf32>
+      %y_42 = tt.expand_dims %y {axis = 2 : i32} : tensor<8x1xf32> -> tensor<8x1x1xf32>
+      %y_43 = tt.broadcast %y_42 : tensor<8x1x1xf32> -> tensor<8x32x2xf32>
+      %y_44 = arith.mulf %x_30, %y_43 : tensor<8x32x2xf32>
+      %y_45 = arith.negf %g_35 : tensor<8x32x2xf32>
+      %y_46 = math.exp %y_45 : tensor<8x32x2xf32>
+      %y_47 = arith.addf %y_46, %cst_4 : tensor<8x32x2xf32>
+      %y_48 = arith.divf %cst_4, %y_47 : tensor<8x32x2xf32>
+      %y_49 = arith.mulf %y_44, %y_48 : tensor<8x32x2xf32>
+      %5 = arith.muli %tok, %stride_y : i32
+      %6 = tt.addptr %Y, %5 : !tt.ptr<bf16>, i32
+      %7 = tt.splat %6 : !tt.ptr<bf16> -> tensor<8x32x2x!tt.ptr<bf16>>
+      %8 = tt.addptr %7, %col_24 : tensor<8x32x2x!tt.ptr<bf16>>, tensor<8x32x2xi32>
+      %9 = arith.truncf %y_49 : tensor<8x32x2xf32> to tensor<8x32x2xbf16>
+      tt.store %8, %9, %x_28 : tensor<8x32x2x!tt.ptr<bf16>>
+    }
+    tt.return
+  }
+}

@@ -1,0 +1,63 @@
+module attributes {"ttg.cluster-dim-x" = 1 : i32, "ttg.cluster-dim-y" = 1 : i32, "ttg.cluster-dim-z" = 1 : i32, "ttg.num-ctas" = 1 : i32, "ttg.num-warps" = 1 : i32, ttg.target = "hip:gfx950", "ttg.threads-per-warp" = 64 : i32} {
+  tt.func public @_varlen_validate_offsets(%CuQ: !tt.ptr<i32> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %CuK: !tt.ptr<i32> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %TaskCounts: !tt.ptr<i32> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %TOTAL_Q: i32 {tt.divisibility = 16 : i32}, %TOTAL_KV: i32 {tt.divisibility = 16 : i32}, %MAX_Q: i32, %MAX_KV: i32) attributes {noinline = false} {
+    %c5_i32 = arith.constant 5 : i32
+    %true = arith.constant true
+    %c4_i32 = arith.constant 4 : i32
+    %c0_i32 = arith.constant 0 : i32
+    %c1_i32 = arith.constant 1 : i32
+    %sequence = tt.get_program_id x : i32
+    %q_start = tt.addptr %CuQ, %sequence : !tt.ptr<i32>, i32
+    %q_start_0 = tt.load %q_start : !tt.ptr<i32>
+    %q_end = arith.addi %sequence, %c1_i32 : i32
+    %q_end_1 = tt.addptr %CuQ, %q_end : !tt.ptr<i32>, i32
+    %q_end_2 = tt.load %q_end_1 : !tt.ptr<i32>
+    %kv_start = tt.addptr %CuK, %sequence : !tt.ptr<i32>, i32
+    %kv_start_3 = tt.load %kv_start : !tt.ptr<i32>
+    %kv_end = tt.addptr %CuK, %q_end : !tt.ptr<i32>, i32
+    %kv_end_4 = tt.load %kv_end : !tt.ptr<i32>
+    %q_len = arith.subi %q_end_2, %q_start_0 : i32
+    %kv_len = arith.subi %kv_end_4, %kv_start_3 : i32
+    %is_first = arith.cmpi eq, %sequence, %c0_i32 : i32
+    %is_last = tt.get_num_programs x : i32
+    %is_last_5 = arith.subi %is_last, %c1_i32 : i32
+    %is_last_6 = arith.cmpi eq, %sequence, %is_last_5 : i32
+    %invalid = arith.cmpi slt, %q_start_0, %c0_i32 : i32
+    %invalid_7 = arith.cmpi slt, %kv_start_3, %c0_i32 : i32
+    %invalid_8 = arith.ori %invalid, %invalid_7 : i1
+    %invalid_9 = arith.cmpi sle, %q_len, %c0_i32 : i32
+    %invalid_10 = arith.ori %invalid_8, %invalid_9 : i1
+    %invalid_11 = arith.cmpi sle, %kv_len, %c0_i32 : i32
+    %invalid_12 = arith.ori %invalid_10, %invalid_11 : i1
+    %invalid_13 = arith.cmpi sgt, %q_end_2, %TOTAL_Q : i32
+    %invalid_14 = arith.ori %invalid_12, %invalid_13 : i1
+    %invalid_15 = arith.cmpi sgt, %kv_end_4, %TOTAL_KV : i32
+    %invalid_16 = arith.ori %invalid_14, %invalid_15 : i1
+    %invalid_17 = arith.cmpi sgt, %q_len, %MAX_Q : i32
+    %invalid_18 = arith.ori %invalid_16, %invalid_17 : i1
+    %invalid_19 = arith.cmpi sgt, %kv_len, %MAX_KV : i32
+    %invalid_20 = arith.ori %invalid_18, %invalid_19 : i1
+    %invalid_21 = arith.cmpi ne, %q_start_0, %c0_i32 : i32
+    %invalid_22 = arith.cmpi ne, %kv_start_3, %c0_i32 : i32
+    %invalid_23 = arith.ori %invalid_21, %invalid_22 : i1
+    %invalid_24 = arith.andi %is_first, %invalid_23 : i1
+    %invalid_25 = arith.ori %invalid_20, %invalid_24 : i1
+    %invalid_26 = arith.cmpi ne, %q_end_2, %TOTAL_Q : i32
+    %invalid_27 = arith.cmpi ne, %kv_end_4, %TOTAL_KV : i32
+    %invalid_28 = arith.ori %invalid_26, %invalid_27 : i1
+    %invalid_29 = arith.andi %is_last_6, %invalid_28 : i1
+    %invalid_30 = arith.ori %invalid_25, %invalid_29 : i1
+    %qk_mismatch = arith.cmpi ne, %q_start_0, %kv_start_3 : i32
+    %qk_mismatch_31 = arith.cmpi ne, %q_end_2, %kv_end_4 : i32
+    %qk_mismatch_32 = arith.ori %qk_mismatch, %qk_mismatch_31 : i1
+    scf.if %invalid_30 {
+      %1 = tt.addptr %TaskCounts, %c4_i32 : !tt.ptr<i32>, i32
+      %2 = tt.atomic_rmw exch, relaxed, gpu, %1, %c1_i32, %true : (!tt.ptr<i32>, i32, i1) -> i32
+    }
+    %0 = arith.ori %invalid_30, %qk_mismatch_32 : i1
+    scf.if %0 {
+      %1 = tt.addptr %TaskCounts, %c5_i32 : !tt.ptr<i32>, i32
+      %2 = tt.atomic_rmw exch, relaxed, gpu, %1, %c1_i32, %true : (!tt.ptr<i32>, i32, i1) -> i32
+    }
+    tt.return
+  }
+}

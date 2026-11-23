@@ -1,0 +1,86 @@
+module attributes {"ttg.cluster-dim-x" = 1 : i32, "ttg.cluster-dim-y" = 1 : i32, "ttg.cluster-dim-z" = 1 : i32} {
+  tt.func public @_pa_decode_reduce_kernel(%Out: !tt.ptr<bf16> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %Mid: !tt.ptr<f32> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %Lse: !tt.ptr<f32> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %num_splits: i32, %stride_o_t: i32 {tt.divisibility = 16 : i32}, %stride_o_h: i32 {tt.divisibility = 16 : i32}, %stride_mid_s: i32 {tt.divisibility = 16 : i32}, %stride_mid_h: i32 {tt.divisibility = 16 : i32}, %stride_mid_k: i32 {tt.divisibility = 16 : i32}, %stride_mid_m: i32 {tt.divisibility = 16 : i32}, %stride_lse_s: i32 {tt.divisibility = 16 : i32}, %stride_lse_h: i32 {tt.divisibility = 16 : i32}, %stride_lse_k: i32 {tt.divisibility = 16 : i32}, %Gate: !tt.ptr<bf16> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %stride_g_t: i32 {tt.divisibility = 16 : i32}, %norm_eps: f32) attributes {noinline = false} {
+    %out = arith.constant 1.000000e+00 : f32
+    %o = arith.constant dense<0.000000e+00> : tensor<2x128xf32>
+    %w = arith.constant dense<0.000000e+00> : tensor<2xf32>
+    %cst = arith.constant 0.000000e+00 : f32
+    %lse = arith.constant dense<0xFF800000> : tensor<2xf32>
+    %cst_0 = arith.constant 0xFF800000 : f32
+    %c4_i32 = arith.constant 4 : i32
+    %gt = tt.get_program_id x : i32
+    %qh = tt.get_program_id y : i32
+    %kv_head = arith.divsi %qh, %c4_i32 : i32
+    %hgrp = arith.remsi %qh, %c4_i32 : i32
+    %offs_k = tt.make_range {end = 2 : i32, start = 0 : i32} : tensor<2xi32>
+    %offs_d = tt.make_range {end = 128 : i32, start = 0 : i32} : tensor<128xi32>
+    %kmask = tt.splat %num_splits : i32 -> tensor<2xi32>
+    %kmask_1 = arith.cmpi slt, %offs_k, %kmask : tensor<2xi32>
+    %lse_2 = arith.muli %gt, %stride_lse_s : i32
+    %lse_3 = tt.addptr %Lse, %lse_2 : !tt.ptr<f32>, i32
+    %lse_4 = arith.muli %kv_head, %stride_lse_h : i32
+    %lse_5 = tt.addptr %lse_3, %lse_4 : !tt.ptr<f32>, i32
+    %lse_6 = tt.splat %stride_lse_k : i32 -> tensor<2xi32>
+    %lse_7 = arith.muli %offs_k, %lse_6 : tensor<2xi32>
+    %lse_8 = tt.splat %lse_5 : !tt.ptr<f32> -> tensor<2x!tt.ptr<f32>>
+    %lse_9 = tt.addptr %lse_8, %lse_7 : tensor<2x!tt.ptr<f32>>, tensor<2xi32>
+    %lse_10 = tt.splat %hgrp : i32 -> tensor<2xi32>
+    %lse_11 = tt.addptr %lse_9, %lse_10 : tensor<2x!tt.ptr<f32>>, tensor<2xi32>
+    %lse_12 = tt.load %lse_11, %kmask_1, %lse : tensor<2x!tt.ptr<f32>>
+    %value = "tt.reduce"(%lse_12) <{axis = 0 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%gmax: f32, %gmax_45: f32):
+      %value_46 = arith.maxnumf %gmax, %gmax_45 : f32
+      tt.reduce.return %value_46 : f32
+    }) : (tensor<2xf32>) -> f32
+    %gmax_safe = arith.cmpf oeq, %value, %cst_0 : f32
+    %gmax_safe_13 = arith.select %gmax_safe, %cst, %value : f32
+    %w_14 = tt.splat %gmax_safe_13 : f32 -> tensor<2xf32>
+    %w_15 = arith.subf %lse_12, %w_14 : tensor<2xf32>
+    %w_16 = math.exp2 %w_15 : tensor<2xf32>
+    %w_17 = arith.select %kmask_1, %w_16, %w : tensor<2xi1>, tensor<2xf32>
+    %wsum = "tt.reduce"(%w_17) <{axis = 0 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%wsum_45: f32, %wsum_46: f32):
+      %wsum_47 = arith.addf %wsum_45, %wsum_46 : f32
+      tt.reduce.return %wsum_47 : f32
+    }) : (tensor<2xf32>) -> f32
+    %o_18 = tt.expand_dims %kmask_1 {axis = 1 : i32} : tensor<2xi1> -> tensor<2x1xi1>
+    %o_19 = arith.muli %gt, %stride_mid_s : i32
+    %o_20 = tt.addptr %Mid, %o_19 : !tt.ptr<f32>, i32
+    %o_21 = arith.muli %kv_head, %stride_mid_h : i32
+    %o_22 = tt.addptr %o_20, %o_21 : !tt.ptr<f32>, i32
+    %o_23 = tt.expand_dims %offs_k {axis = 1 : i32} : tensor<2xi32> -> tensor<2x1xi32>
+    %o_24 = tt.splat %stride_mid_k : i32 -> tensor<2x1xi32>
+    %o_25 = arith.muli %o_23, %o_24 : tensor<2x1xi32>
+    %o_26 = tt.splat %o_22 : !tt.ptr<f32> -> tensor<2x1x!tt.ptr<f32>>
+    %o_27 = tt.addptr %o_26, %o_25 : tensor<2x1x!tt.ptr<f32>>, tensor<2x1xi32>
+    %o_28 = arith.muli %hgrp, %stride_mid_m : i32
+    %o_29 = tt.splat %o_28 : i32 -> tensor<2x1xi32>
+    %o_30 = tt.addptr %o_27, %o_29 : tensor<2x1x!tt.ptr<f32>>, tensor<2x1xi32>
+    %o_31 = tt.expand_dims %offs_d {axis = 0 : i32} : tensor<128xi32> -> tensor<1x128xi32>
+    %o_32 = tt.broadcast %o_30 : tensor<2x1x!tt.ptr<f32>> -> tensor<2x128x!tt.ptr<f32>>
+    %o_33 = tt.broadcast %o_31 : tensor<1x128xi32> -> tensor<2x128xi32>
+    %o_34 = tt.addptr %o_32, %o_33 : tensor<2x128x!tt.ptr<f32>>, tensor<2x128xi32>
+    %o_35 = tt.broadcast %o_18 : tensor<2x1xi1> -> tensor<2x128xi1>
+    %o_36 = tt.load %o_34, %o_35, %o : tensor<2x128x!tt.ptr<f32>>
+    %out_37 = tt.expand_dims %w_17 {axis = 1 : i32} : tensor<2xf32> -> tensor<2x1xf32>
+    %out_38 = tt.broadcast %out_37 : tensor<2x1xf32> -> tensor<2x128xf32>
+    %out_39 = arith.mulf %o_36, %out_38 : tensor<2x128xf32>
+    %out_40 = "tt.reduce"(%out_39) <{axis = 0 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%out_45: f32, %out_46: f32):
+      %out_47 = arith.addf %out_45, %out_46 : f32
+      tt.reduce.return %out_47 : f32
+    }) : (tensor<2x128xf32>) -> tensor<128xf32>
+    %out_41 = arith.cmpf ogt, %wsum, %cst : f32
+    %out_42 = arith.select %out_41, %wsum, %out : f32
+    %out_43 = tt.splat %out_42 : f32 -> tensor<128xf32>
+    %out_44 = arith.divf %out_40, %out_43 : tensor<128xf32>
+    %0 = arith.muli %gt, %stride_o_t : i32
+    %1 = tt.addptr %Out, %0 : !tt.ptr<bf16>, i32
+    %2 = arith.muli %qh, %stride_o_h : i32
+    %3 = tt.addptr %1, %2 : !tt.ptr<bf16>, i32
+    %4 = tt.splat %3 : !tt.ptr<bf16> -> tensor<128x!tt.ptr<bf16>>
+    %5 = tt.addptr %4, %offs_d : tensor<128x!tt.ptr<bf16>>, tensor<128xi32>
+    %6 = arith.truncf %out_44 : tensor<128xf32> to tensor<128xbf16>
+    tt.store %5, %6 : tensor<128x!tt.ptr<bf16>>
+    tt.return
+  }
+}

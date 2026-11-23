@@ -1,0 +1,51 @@
+module attributes {"ttg.cluster-dim-x" = 1 : i32, "ttg.cluster-dim-y" = 1 : i32, "ttg.cluster-dim-z" = 1 : i32} {
+  tt.func public @_reduce_split_k(%workspace: !tt.ptr<f32> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %C: !tt.ptr<bf16> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}) attributes {noinline = false} {
+    %acc = arith.constant dense<0.000000e+00> : tensor<32x128xf32>
+    %acc_0 = arith.constant 3145728 : i32
+    %acc_1 = arith.constant 2097152 : i32
+    %acc_2 = arith.constant 1048576 : i32
+    %offsets = arith.constant dense<1024> : tensor<32x1xi32>
+    %cols = arith.constant 128 : i32
+    %rows = arith.constant 32 : i32
+    %pm = tt.get_program_id x : i32
+    %pn = tt.get_program_id y : i32
+    %rows_3 = arith.muli %pm, %rows : i32
+    %rows_4 = tt.make_range {end = 32 : i32, start = 0 : i32} : tensor<32xi32>
+    %rows_5 = tt.splat %rows_3 : i32 -> tensor<32xi32>
+    %rows_6 = arith.addi %rows_5, %rows_4 : tensor<32xi32>
+    %cols_7 = arith.muli %pn, %cols : i32
+    %cols_8 = tt.make_range {end = 128 : i32, start = 0 : i32} : tensor<128xi32>
+    %cols_9 = tt.splat %cols_7 : i32 -> tensor<128xi32>
+    %cols_10 = arith.addi %cols_9, %cols_8 : tensor<128xi32>
+    %offsets_11 = tt.expand_dims %rows_6 {axis = 1 : i32} : tensor<32xi32> -> tensor<32x1xi32>
+    %offsets_12 = arith.muli %offsets_11, %offsets : tensor<32x1xi32>
+    %offsets_13 = tt.expand_dims %cols_10 {axis = 0 : i32} : tensor<128xi32> -> tensor<1x128xi32>
+    %offsets_14 = tt.broadcast %offsets_12 : tensor<32x1xi32> -> tensor<32x128xi32>
+    %offsets_15 = tt.broadcast %offsets_13 : tensor<1x128xi32> -> tensor<32x128xi32>
+    %offsets_16 = arith.addi %offsets_14, %offsets_15 : tensor<32x128xi32>
+    %acc_17 = tt.splat %workspace : !tt.ptr<f32> -> tensor<32x128x!tt.ptr<f32>>
+    %acc_18 = tt.addptr %acc_17, %offsets_16 : tensor<32x128x!tt.ptr<f32>>, tensor<32x128xi32>
+    %acc_19 = tt.load %acc_18 : tensor<32x128x!tt.ptr<f32>>
+    %acc_20 = arith.addf %acc_19, %acc : tensor<32x128xf32>
+    %acc_21 = tt.addptr %workspace, %acc_2 : !tt.ptr<f32>, i32
+    %acc_22 = tt.splat %acc_21 : !tt.ptr<f32> -> tensor<32x128x!tt.ptr<f32>>
+    %acc_23 = tt.addptr %acc_22, %offsets_16 : tensor<32x128x!tt.ptr<f32>>, tensor<32x128xi32>
+    %acc_24 = tt.load %acc_23 : tensor<32x128x!tt.ptr<f32>>
+    %acc_25 = arith.addf %acc_20, %acc_24 : tensor<32x128xf32>
+    %acc_26 = tt.addptr %workspace, %acc_1 : !tt.ptr<f32>, i32
+    %acc_27 = tt.splat %acc_26 : !tt.ptr<f32> -> tensor<32x128x!tt.ptr<f32>>
+    %acc_28 = tt.addptr %acc_27, %offsets_16 : tensor<32x128x!tt.ptr<f32>>, tensor<32x128xi32>
+    %acc_29 = tt.load %acc_28 : tensor<32x128x!tt.ptr<f32>>
+    %acc_30 = arith.addf %acc_25, %acc_29 : tensor<32x128xf32>
+    %acc_31 = tt.addptr %workspace, %acc_0 : !tt.ptr<f32>, i32
+    %acc_32 = tt.splat %acc_31 : !tt.ptr<f32> -> tensor<32x128x!tt.ptr<f32>>
+    %acc_33 = tt.addptr %acc_32, %offsets_16 : tensor<32x128x!tt.ptr<f32>>, tensor<32x128xi32>
+    %acc_34 = tt.load %acc_33 : tensor<32x128x!tt.ptr<f32>>
+    %acc_35 = arith.addf %acc_30, %acc_34 : tensor<32x128xf32>
+    %0 = tt.splat %C : !tt.ptr<bf16> -> tensor<32x128x!tt.ptr<bf16>>
+    %1 = tt.addptr %0, %offsets_16 : tensor<32x128x!tt.ptr<bf16>>, tensor<32x128xi32>
+    %2 = arith.truncf %acc_35 : tensor<32x128xf32> to tensor<32x128xbf16>
+    tt.store %1, %2 : tensor<32x128x!tt.ptr<bf16>>
+    tt.return
+  }
+}

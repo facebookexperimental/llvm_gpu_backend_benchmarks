@@ -1,0 +1,25 @@
+module attributes {"ttg.cluster-dim-x" = 1 : i32, "ttg.cluster-dim-y" = 1 : i32, "ttg.cluster-dim-z" = 1 : i32} {
+  tt.func public @_reduce_splits_kernel(%P: !tt.ptr<f32> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %OUT: !tt.ptr<f32> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %MN: i32 {tt.divisibility = 16 : i32}) attributes {noinline = false} {
+    %cst = arith.constant dense<0.000000e+00> : tensor<1024xf32>
+    %offs = arith.constant 1024 : i32
+    %pid = tt.get_program_id x : i32
+    %offs_0 = arith.muli %pid, %offs : i32
+    %offs_1 = tt.make_range {end = 1024 : i32, start = 0 : i32} : tensor<1024xi32>
+    %offs_2 = tt.splat %offs_0 : i32 -> tensor<1024xi32>
+    %offs_3 = arith.addi %offs_2, %offs_1 : tensor<1024xi32>
+    %mask = tt.splat %MN : i32 -> tensor<1024xi32>
+    %mask_4 = arith.cmpi slt, %offs_3, %mask : tensor<1024xi32>
+    %acc = tt.splat %P : !tt.ptr<f32> -> tensor<1024x!tt.ptr<f32>>
+    %acc_5 = tt.addptr %acc, %offs_3 : tensor<1024x!tt.ptr<f32>>, tensor<1024xi32>
+    %acc_6 = tt.load %acc_5, %mask_4, %cst : tensor<1024x!tt.ptr<f32>>
+    %acc_7 = tt.addptr %P, %MN : !tt.ptr<f32>, i32
+    %acc_8 = tt.splat %acc_7 : !tt.ptr<f32> -> tensor<1024x!tt.ptr<f32>>
+    %acc_9 = tt.addptr %acc_8, %offs_3 : tensor<1024x!tt.ptr<f32>>, tensor<1024xi32>
+    %acc_10 = tt.load %acc_9, %mask_4, %cst : tensor<1024x!tt.ptr<f32>>
+    %acc_11 = arith.addf %acc_6, %acc_10 : tensor<1024xf32>
+    %0 = tt.splat %OUT : !tt.ptr<f32> -> tensor<1024x!tt.ptr<f32>>
+    %1 = tt.addptr %0, %offs_3 : tensor<1024x!tt.ptr<f32>>, tensor<1024xi32>
+    tt.store %1, %acc_11, %mask_4 : tensor<1024x!tt.ptr<f32>>
+    tt.return
+  }
+}

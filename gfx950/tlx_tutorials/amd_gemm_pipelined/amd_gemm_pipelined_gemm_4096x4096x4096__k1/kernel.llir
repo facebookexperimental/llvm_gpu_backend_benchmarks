@@ -1,0 +1,465 @@
+; ModuleID = 'LLVMDialectModule'
+source_filename = "LLVMDialectModule"
+target datalayout = "e-m:e-p:64:64-p1:64:64-p2:32:32-p3:32:32-p4:64:64-p5:32:32-p6:32:32-p7:160:256:256:32-p8:128:128:128:48-p9:192:256:256:32-p10:32:32-p11:32:32-p12:32:32-p13:32:32-p14:32:32-p15:32:32-i64:64-v16:16-v24:32-v32:32-v48:64-v96:128-v192:256-v256:256-v512:512-v1024:1024-v2048:2048-n32:64-S32-A5-G1-ni:7:8:9"
+target triple = "amdgpu9.50-amd-amdhsa"
+
+@global_smem = external addrspace(3) global [0 x i8], align 16
+
+; Function Attrs: norecurse nounwind
+define amdgpu_kernel void @matmul_kernel_pipelined_mi300(ptr addrspace(1) inreg nofree readonly captures(none) %0, ptr addrspace(1) inreg nofree readonly captures(none) %1, ptr addrspace(1) inreg nofree writeonly captures(none) %2, i32 inreg %3, i32 inreg %4, i32 inreg %5, i32 inreg %6, i32 inreg %7, i32 inreg %8, ptr addrspace(1) inreg nofree readnone captures(none) %9, ptr addrspace(1) inreg nofree readnone captures(none) %10) local_unnamed_addr #0 {
+  %12 = tail call i32 @llvm.amdgcn.workitem.id.x()
+  %13 = tail call i32 @llvm.amdgcn.readfirstlane.i32(i32 %12)
+  %14 = and i32 %13, 192
+  %15 = tail call i32 @llvm.amdgcn.workgroup.id.x()
+  %16 = add i32 %3, 31
+  %17 = sdiv i32 %16, 32
+  %18 = add i32 %4, 31
+  %19 = sdiv i32 %18, 32
+  %.frozen = freeze i32 %19
+  %20 = sdiv i32 %15, %.frozen
+  %21 = sub i32 %17, %20
+  %22 = tail call i32 @llvm.smin.i32(i32 %21, i32 1)
+  %23 = mul i32 %20, %.frozen
+  %.decomposed = sub i32 %15, %23
+  %.frozen102 = freeze i32 %22
+  %24 = sdiv i32 %.decomposed, %.frozen102
+  %25 = mul i32 %24, %.frozen102
+  %.decomposed103 = sub i32 %.decomposed, %25
+  %26 = add i32 %.decomposed103, %20
+  %27 = icmp sgt i32 %26, -1
+  tail call void @llvm.assume(i1 %27)
+  %28 = icmp sgt i32 %24, -1
+  tail call void @llvm.assume(i1 %28)
+  %29 = icmp sgt i32 %6, 0
+  tail call void @llvm.assume(i1 %29)
+  %30 = icmp sgt i32 %7, 0
+  tail call void @llvm.assume(i1 %30)
+  %31 = icmp sgt i32 %8, 0
+  tail call void @llvm.assume(i1 %31)
+  %32 = shl i32 %26, 5
+  %33 = and i32 %12, 63
+  %34 = or disjoint i32 %14, %33
+  %35 = lshr i32 %34, 3
+  %36 = shl nuw nsw i32 %12, 3
+  %37 = and i32 %36, 24
+  %38 = and i32 %12, 15
+  %39 = and i32 %13, 128
+  %40 = and i32 %34, 112
+  %41 = or disjoint i32 %32, %35
+  %42 = srem i32 %41, %3
+  %43 = shl nuw nsw i32 %24, 5
+  %44 = or disjoint i32 %43, %37
+  %45 = srem i32 %44, %4
+  %46 = and i32 %36, 56
+  %47 = mul i32 %42, %6
+  %48 = add i32 %47, %46
+  %49 = lshr i32 %34, 2
+  %50 = mul i32 %49, %7
+  %51 = add i32 %45, %50
+  %52 = add i32 %5, 63
+  %53 = icmp slt i32 %46, %5
+  %54 = tail call ptr addrspace(8) @llvm.amdgcn.make.buffer.rsrc.p8.p1.i32(ptr addrspace(1) %0, i16 0, i32 2147483646, i32 159744)
+  %55 = shl i32 %48, 1
+  %56 = select i1 %53, i32 %55, i32 -2147483648
+  %57 = tail call <4 x i32> @llvm.amdgcn.raw.ptr.buffer.load.v4i32(ptr addrspace(8) %54, i32 %56, i32 0, i32 0)
+  %58 = icmp slt i32 %49, %5
+  %59 = tail call ptr addrspace(8) @llvm.amdgcn.make.buffer.rsrc.p8.p1.i32(ptr addrspace(1) %1, i16 0, i32 2147483646, i32 159744)
+  %60 = shl i32 %51, 1
+  %61 = select i1 %58, i32 %60, i32 -2147483648
+  %62 = tail call <4 x i32> @llvm.amdgcn.raw.ptr.buffer.load.v4i32(ptr addrspace(8) %59, i32 %61, i32 0, i32 0)
+  %63 = shl nuw nsw i32 %34, 4
+  %64 = xor i32 %63, %40
+  %65 = getelementptr inbounds nuw i8, ptr addrspace(3) @global_smem, i32 %64
+  store <4 x i32> %57, ptr addrspace(3) %65, align 16
+  %66 = and i32 %12, 48
+  %67 = xor i32 %63, %66
+  %68 = getelementptr inbounds nuw i8, ptr addrspace(3) getelementptr (i8, ptr addrspace(3) @global_smem, i32 4096), i32 %67
+  store <4 x i32> %62, ptr addrspace(3) %68, align 16
+  %69 = shl i32 %7, 6
+  %70 = icmp sgt i32 %52, 127
+  br i1 %70, label %.lr.ph, label %.._crit_edge_crit_edge
+
+.._crit_edge_crit_edge:                           ; preds = %11
+  %.pre = shl nuw nsw i32 %38, 7
+  %.pre46 = and i32 %36, 112
+  %.pre48 = shl nuw nsw i32 %39, 4
+  %.pre50 = or disjoint i32 %.pre48, %.pre
+  %.pre52 = xor i32 %.pre46, %66
+  %.pre54 = or disjoint i32 %.pre50, %.pre52
+  %.pre56 = xor i32 %.pre54, 64
+  %.pre58 = shl nuw nsw i32 %12, 4
+  %.pre60 = and i32 %.pre58, 192
+  %.pre62 = and i32 %12, 16
+  %.pre64 = shl nuw nsw i32 %12, 5
+  %.pre66 = and i32 %.pre64, 1024
+  %.pre68 = lshr i32 %13, 1
+  %.pre70 = and i32 %.pre68, 32
+  %.pre72 = or disjoint i32 %.pre66, %.pre60
+  br label %._crit_edge
+
+.lr.ph:                                           ; preds = %11
+  %71 = lshr i32 %52, 6
+  %72 = shl nuw nsw i32 %38, 7
+  %73 = and i32 %36, 112
+  %74 = shl nuw nsw i32 %39, 4
+  %75 = or disjoint i32 %74, %72
+  %76 = xor i32 %73, %66
+  %77 = or disjoint i32 %75, %76
+  %78 = getelementptr inbounds nuw i8, ptr addrspace(3) @global_smem, i32 %77
+  %79 = xor i32 %77, 64
+  %80 = getelementptr inbounds nuw i8, ptr addrspace(3) @global_smem, i32 %79
+  %81 = shl nuw nsw i32 %12, 4
+  %82 = and i32 %81, 192
+  %83 = and i32 %12, 16
+  %84 = icmp eq i32 %83, 0
+  %85 = select i1 %84, i32 0, i32 544
+  %86 = shl nuw nsw i32 %12, 5
+  %87 = and i32 %86, 1024
+  %88 = lshr i32 %13, 1
+  %89 = and i32 %88, 32
+  %90 = xor i32 %89, %85
+  %91 = or disjoint i32 %87, %82
+  %92 = or disjoint i32 %91, %90
+  %93 = or disjoint i32 %92, %37
+  %94 = getelementptr inbounds nuw i8, ptr addrspace(3) getelementptr (i8, ptr addrspace(3) @global_smem, i32 4096), i32 %93
+  %95 = getelementptr inbounds nuw i8, ptr addrspace(3) %94, i32 2048
+  %96 = xor i32 %93, 272
+  %97 = getelementptr inbounds nuw i8, ptr addrspace(3) getelementptr (i8, ptr addrspace(3) @global_smem, i32 4096), i32 %96
+  %98 = getelementptr inbounds nuw i8, ptr addrspace(3) %97, i32 2048
+  %99 = add nsw i32 %71, -1
+  %100 = add nsw i32 %71, -2
+  %xtraiter = and i32 %99, 3
+  %101 = icmp ult i32 %100, 3
+  br i1 %101, label %.epil.preheader, label %.lr.ph.new
+
+.lr.ph.new:                                       ; preds = %.lr.ph
+  %unroll_iter = and i32 %99, -4
+  br label %102
+
+102:                                              ; preds = %102, %.lr.ph.new
+  %.pn3444 = phi i32 [ %51, %.lr.ph.new ], [ %.pn33.3, %102 ]
+  %.pn17.in43 = phi i32 [ %48, %.lr.ph.new ], [ %.pn17.3, %102 ]
+  %103 = phi float [ 0.000000e+00, %.lr.ph.new ], [ %195, %102 ]
+  %104 = phi float [ 0.000000e+00, %.lr.ph.new ], [ %196, %102 ]
+  %105 = phi float [ 0.000000e+00, %.lr.ph.new ], [ %197, %102 ]
+  %106 = phi float [ 0.000000e+00, %.lr.ph.new ], [ %198, %102 ]
+  %107 = phi i32 [ 1, %.lr.ph.new ], [ %199, %102 ]
+  %niter = phi i32 [ 0, %.lr.ph.new ], [ %niter.next.3, %102 ]
+  %.pn33 = add i32 %.pn3444, %69
+  %108 = shl nuw nsw i32 %107, 6
+  %109 = sub nsw i32 %5, %108
+  %110 = icmp slt i32 %46, %109
+  %.pn17 = shl i32 %.pn17.in43, 1
+  %111 = add i32 %.pn17, 128
+  %112 = select i1 %110, i32 %111, i32 -2147483648
+  %113 = tail call <4 x i32> @llvm.amdgcn.raw.ptr.buffer.load.v4i32(ptr addrspace(8) %54, i32 %112, i32 0, i32 0)
+  fence syncscope("workgroup") release, !mmra !83
+  tail call void @llvm.amdgcn.s.barrier()
+  fence syncscope("workgroup") acquire, !mmra !83
+  %114 = load <8 x half>, ptr addrspace(3) %78, align 16
+  %115 = load <8 x half>, ptr addrspace(3) %80, align 16
+  %116 = tail call <4 x half> @llvm.amdgcn.ds.read.tr16.b64.v4f16(ptr addrspace(3) %94)
+  %117 = tail call <4 x half> @llvm.amdgcn.ds.read.tr16.b64.v4f16(ptr addrspace(3) nonnull %95)
+  %118 = tail call <4 x half> @llvm.amdgcn.ds.read.tr16.b64.v4f16(ptr addrspace(3) %97)
+  %119 = tail call <4 x half> @llvm.amdgcn.ds.read.tr16.b64.v4f16(ptr addrspace(3) nonnull %98)
+  %120 = icmp slt i32 %49, %109
+  %121 = shl i32 %.pn33, 1
+  %122 = select i1 %120, i32 %121, i32 -2147483648
+  %123 = tail call <4 x i32> @llvm.amdgcn.raw.ptr.buffer.load.v4i32(ptr addrspace(8) %59, i32 %122, i32 0, i32 0)
+  %124 = shufflevector <4 x half> %116, <4 x half> %118, <8 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7>
+  %125 = shufflevector <4 x half> %117, <4 x half> %119, <8 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7>
+  %126 = insertelement <4 x float> poison, float %103, i64 0
+  %127 = insertelement <4 x float> %126, float %104, i64 1
+  %128 = insertelement <4 x float> %127, float %105, i64 2
+  %129 = insertelement <4 x float> %128, float %106, i64 3
+  %130 = tail call <4 x float> @llvm.amdgcn.mfma.f32.16x16x32.f16(<8 x half> %124, <8 x half> %114, <4 x float> %129, i32 0, i32 0, i32 0)
+  %131 = tail call <4 x float> @llvm.amdgcn.mfma.f32.16x16x32.f16(<8 x half> %125, <8 x half> %115, <4 x float> %130, i32 0, i32 0, i32 0)
+  fence syncscope("workgroup") release, !mmra !83
+  tail call void @llvm.amdgcn.s.barrier()
+  fence syncscope("workgroup") acquire, !mmra !83
+  store <4 x i32> %113, ptr addrspace(3) %65, align 16
+  store <4 x i32> %123, ptr addrspace(3) %68, align 16
+  %.pn33.1 = add i32 %.pn33, %69
+  %132 = shl i32 %107, 6
+  %133 = add i32 %132, 64
+  %134 = sub nsw i32 %5, %133
+  %135 = icmp slt i32 %46, %134
+  %.pn17.1 = shl i32 %.pn17.in43, 1
+  %136 = add i32 %.pn17.1, 256
+  %137 = select i1 %135, i32 %136, i32 -2147483648
+  %138 = tail call <4 x i32> @llvm.amdgcn.raw.ptr.buffer.load.v4i32(ptr addrspace(8) %54, i32 %137, i32 0, i32 0)
+  fence syncscope("workgroup") release, !mmra !83
+  tail call void @llvm.amdgcn.s.barrier()
+  fence syncscope("workgroup") acquire, !mmra !83
+  %139 = load <8 x half>, ptr addrspace(3) %78, align 16
+  %140 = load <8 x half>, ptr addrspace(3) %80, align 16
+  %141 = tail call <4 x half> @llvm.amdgcn.ds.read.tr16.b64.v4f16(ptr addrspace(3) %94)
+  %142 = tail call <4 x half> @llvm.amdgcn.ds.read.tr16.b64.v4f16(ptr addrspace(3) nonnull %95)
+  %143 = tail call <4 x half> @llvm.amdgcn.ds.read.tr16.b64.v4f16(ptr addrspace(3) %97)
+  %144 = tail call <4 x half> @llvm.amdgcn.ds.read.tr16.b64.v4f16(ptr addrspace(3) nonnull %98)
+  %145 = icmp slt i32 %49, %134
+  %146 = shl i32 %.pn33.1, 1
+  %147 = select i1 %145, i32 %146, i32 -2147483648
+  %148 = tail call <4 x i32> @llvm.amdgcn.raw.ptr.buffer.load.v4i32(ptr addrspace(8) %59, i32 %147, i32 0, i32 0)
+  %149 = shufflevector <4 x half> %141, <4 x half> %143, <8 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7>
+  %150 = shufflevector <4 x half> %142, <4 x half> %144, <8 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7>
+  %151 = tail call <4 x float> @llvm.amdgcn.mfma.f32.16x16x32.f16(<8 x half> %149, <8 x half> %139, <4 x float> %131, i32 0, i32 0, i32 0)
+  %152 = tail call <4 x float> @llvm.amdgcn.mfma.f32.16x16x32.f16(<8 x half> %150, <8 x half> %140, <4 x float> %151, i32 0, i32 0, i32 0)
+  fence syncscope("workgroup") release, !mmra !83
+  tail call void @llvm.amdgcn.s.barrier()
+  fence syncscope("workgroup") acquire, !mmra !83
+  store <4 x i32> %138, ptr addrspace(3) %65, align 16
+  store <4 x i32> %148, ptr addrspace(3) %68, align 16
+  %.pn33.2 = add i32 %.pn33.1, %69
+  %153 = shl i32 %107, 6
+  %154 = add i32 %153, 128
+  %155 = sub nsw i32 %5, %154
+  %156 = icmp slt i32 %46, %155
+  %.pn17.2 = shl i32 %.pn17.in43, 1
+  %157 = add i32 %.pn17.2, 384
+  %158 = select i1 %156, i32 %157, i32 -2147483648
+  %159 = tail call <4 x i32> @llvm.amdgcn.raw.ptr.buffer.load.v4i32(ptr addrspace(8) %54, i32 %158, i32 0, i32 0)
+  fence syncscope("workgroup") release, !mmra !83
+  tail call void @llvm.amdgcn.s.barrier()
+  fence syncscope("workgroup") acquire, !mmra !83
+  %160 = load <8 x half>, ptr addrspace(3) %78, align 16
+  %161 = load <8 x half>, ptr addrspace(3) %80, align 16
+  %162 = tail call <4 x half> @llvm.amdgcn.ds.read.tr16.b64.v4f16(ptr addrspace(3) %94)
+  %163 = tail call <4 x half> @llvm.amdgcn.ds.read.tr16.b64.v4f16(ptr addrspace(3) nonnull %95)
+  %164 = tail call <4 x half> @llvm.amdgcn.ds.read.tr16.b64.v4f16(ptr addrspace(3) %97)
+  %165 = tail call <4 x half> @llvm.amdgcn.ds.read.tr16.b64.v4f16(ptr addrspace(3) nonnull %98)
+  %166 = icmp slt i32 %49, %155
+  %167 = shl i32 %.pn33.2, 1
+  %168 = select i1 %166, i32 %167, i32 -2147483648
+  %169 = tail call <4 x i32> @llvm.amdgcn.raw.ptr.buffer.load.v4i32(ptr addrspace(8) %59, i32 %168, i32 0, i32 0)
+  %170 = shufflevector <4 x half> %162, <4 x half> %164, <8 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7>
+  %171 = shufflevector <4 x half> %163, <4 x half> %165, <8 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7>
+  %172 = tail call <4 x float> @llvm.amdgcn.mfma.f32.16x16x32.f16(<8 x half> %170, <8 x half> %160, <4 x float> %152, i32 0, i32 0, i32 0)
+  %173 = tail call <4 x float> @llvm.amdgcn.mfma.f32.16x16x32.f16(<8 x half> %171, <8 x half> %161, <4 x float> %172, i32 0, i32 0, i32 0)
+  fence syncscope("workgroup") release, !mmra !83
+  tail call void @llvm.amdgcn.s.barrier()
+  fence syncscope("workgroup") acquire, !mmra !83
+  store <4 x i32> %159, ptr addrspace(3) %65, align 16
+  store <4 x i32> %169, ptr addrspace(3) %68, align 16
+  %.pn33.3 = add i32 %.pn33.2, %69
+  %.pn17.3 = add i32 %.pn17.in43, 256
+  %174 = shl i32 %107, 6
+  %175 = add i32 %174, 192
+  %176 = sub nsw i32 %5, %175
+  %177 = icmp slt i32 %46, %176
+  %178 = shl i32 %.pn17.3, 1
+  %179 = select i1 %177, i32 %178, i32 -2147483648
+  %180 = tail call <4 x i32> @llvm.amdgcn.raw.ptr.buffer.load.v4i32(ptr addrspace(8) %54, i32 %179, i32 0, i32 0)
+  fence syncscope("workgroup") release, !mmra !83
+  tail call void @llvm.amdgcn.s.barrier()
+  fence syncscope("workgroup") acquire, !mmra !83
+  %181 = load <8 x half>, ptr addrspace(3) %78, align 16
+  %182 = load <8 x half>, ptr addrspace(3) %80, align 16
+  %183 = tail call <4 x half> @llvm.amdgcn.ds.read.tr16.b64.v4f16(ptr addrspace(3) %94)
+  %184 = tail call <4 x half> @llvm.amdgcn.ds.read.tr16.b64.v4f16(ptr addrspace(3) nonnull %95)
+  %185 = tail call <4 x half> @llvm.amdgcn.ds.read.tr16.b64.v4f16(ptr addrspace(3) %97)
+  %186 = tail call <4 x half> @llvm.amdgcn.ds.read.tr16.b64.v4f16(ptr addrspace(3) nonnull %98)
+  %187 = icmp slt i32 %49, %176
+  %188 = shl i32 %.pn33.3, 1
+  %189 = select i1 %187, i32 %188, i32 -2147483648
+  %190 = tail call <4 x i32> @llvm.amdgcn.raw.ptr.buffer.load.v4i32(ptr addrspace(8) %59, i32 %189, i32 0, i32 0)
+  %191 = shufflevector <4 x half> %183, <4 x half> %185, <8 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7>
+  %192 = shufflevector <4 x half> %184, <4 x half> %186, <8 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7>
+  %193 = tail call <4 x float> @llvm.amdgcn.mfma.f32.16x16x32.f16(<8 x half> %191, <8 x half> %181, <4 x float> %173, i32 0, i32 0, i32 0)
+  %194 = tail call <4 x float> @llvm.amdgcn.mfma.f32.16x16x32.f16(<8 x half> %192, <8 x half> %182, <4 x float> %193, i32 0, i32 0, i32 0)
+  %195 = extractelement <4 x float> %194, i64 0
+  %196 = extractelement <4 x float> %194, i64 1
+  %197 = extractelement <4 x float> %194, i64 2
+  %198 = extractelement <4 x float> %194, i64 3
+  fence syncscope("workgroup") release, !mmra !83
+  tail call void @llvm.amdgcn.s.barrier()
+  fence syncscope("workgroup") acquire, !mmra !83
+  store <4 x i32> %180, ptr addrspace(3) %65, align 16
+  store <4 x i32> %190, ptr addrspace(3) %68, align 16
+  %199 = add nuw nsw i32 %107, 4
+  %niter.next.3 = add i32 %niter, 4
+  %niter.ncmp.3 = icmp eq i32 %niter.next.3, %unroll_iter
+  br i1 %niter.ncmp.3, label %._crit_edge.loopexit.unr-lcssa, label %102
+
+._crit_edge.loopexit.unr-lcssa:                   ; preds = %102
+  %lcmp.mod.not = icmp eq i32 %xtraiter, 0
+  br i1 %lcmp.mod.not, label %._crit_edge, label %.epil.preheader
+
+.epil.preheader:                                  ; preds = %._crit_edge.loopexit.unr-lcssa, %.lr.ph
+  %.pn3444.epil.init = phi i32 [ %51, %.lr.ph ], [ %.pn33.3, %._crit_edge.loopexit.unr-lcssa ]
+  %.pn17.in43.epil.init = phi i32 [ %48, %.lr.ph ], [ %.pn17.3, %._crit_edge.loopexit.unr-lcssa ]
+  %.epil.init = phi float [ 0.000000e+00, %.lr.ph ], [ %195, %._crit_edge.loopexit.unr-lcssa ]
+  %.epil.init81 = phi float [ 0.000000e+00, %.lr.ph ], [ %196, %._crit_edge.loopexit.unr-lcssa ]
+  %.epil.init83 = phi float [ 0.000000e+00, %.lr.ph ], [ %197, %._crit_edge.loopexit.unr-lcssa ]
+  %.epil.init85 = phi float [ 0.000000e+00, %.lr.ph ], [ %198, %._crit_edge.loopexit.unr-lcssa ]
+  %.epil.init87 = phi i32 [ 1, %.lr.ph ], [ %199, %._crit_edge.loopexit.unr-lcssa ]
+  %lcmp.mod92 = icmp ne i32 %xtraiter, 0
+  tail call void @llvm.assume(i1 %lcmp.mod92)
+  br label %200
+
+200:                                              ; preds = %200, %.epil.preheader
+  %.pn3444.epil = phi i32 [ %.pn3444.epil.init, %.epil.preheader ], [ %.pn33.epil, %200 ]
+  %.pn17.in43.epil = phi i32 [ %.pn17.in43.epil.init, %.epil.preheader ], [ %.pn17.epil, %200 ]
+  %201 = phi float [ %.epil.init, %.epil.preheader ], [ %230, %200 ]
+  %202 = phi float [ %.epil.init81, %.epil.preheader ], [ %231, %200 ]
+  %203 = phi float [ %.epil.init83, %.epil.preheader ], [ %232, %200 ]
+  %204 = phi float [ %.epil.init85, %.epil.preheader ], [ %233, %200 ]
+  %205 = phi i32 [ %.epil.init87, %.epil.preheader ], [ %234, %200 ]
+  %epil.iter = phi i32 [ 0, %.epil.preheader ], [ %epil.iter.next, %200 ]
+  %.pn33.epil = add i32 %.pn3444.epil, %69
+  %.pn17.epil = add i32 %.pn17.in43.epil, 64
+  %206 = shl nuw nsw i32 %205, 6
+  %207 = sub nsw i32 %5, %206
+  %208 = icmp slt i32 %46, %207
+  %209 = shl i32 %.pn17.epil, 1
+  %210 = select i1 %208, i32 %209, i32 -2147483648
+  %211 = tail call <4 x i32> @llvm.amdgcn.raw.ptr.buffer.load.v4i32(ptr addrspace(8) %54, i32 %210, i32 0, i32 0)
+  fence syncscope("workgroup") release, !mmra !83
+  tail call void @llvm.amdgcn.s.barrier()
+  fence syncscope("workgroup") acquire, !mmra !83
+  %212 = load <8 x half>, ptr addrspace(3) %78, align 16
+  %213 = load <8 x half>, ptr addrspace(3) %80, align 16
+  %214 = tail call <4 x half> @llvm.amdgcn.ds.read.tr16.b64.v4f16(ptr addrspace(3) %94)
+  %215 = tail call <4 x half> @llvm.amdgcn.ds.read.tr16.b64.v4f16(ptr addrspace(3) nonnull %95)
+  %216 = tail call <4 x half> @llvm.amdgcn.ds.read.tr16.b64.v4f16(ptr addrspace(3) %97)
+  %217 = tail call <4 x half> @llvm.amdgcn.ds.read.tr16.b64.v4f16(ptr addrspace(3) nonnull %98)
+  %218 = icmp slt i32 %49, %207
+  %219 = shl i32 %.pn33.epil, 1
+  %220 = select i1 %218, i32 %219, i32 -2147483648
+  %221 = tail call <4 x i32> @llvm.amdgcn.raw.ptr.buffer.load.v4i32(ptr addrspace(8) %59, i32 %220, i32 0, i32 0)
+  %222 = shufflevector <4 x half> %214, <4 x half> %216, <8 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7>
+  %223 = shufflevector <4 x half> %215, <4 x half> %217, <8 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7>
+  %224 = insertelement <4 x float> poison, float %201, i64 0
+  %225 = insertelement <4 x float> %224, float %202, i64 1
+  %226 = insertelement <4 x float> %225, float %203, i64 2
+  %227 = insertelement <4 x float> %226, float %204, i64 3
+  %228 = tail call <4 x float> @llvm.amdgcn.mfma.f32.16x16x32.f16(<8 x half> %222, <8 x half> %212, <4 x float> %227, i32 0, i32 0, i32 0)
+  %229 = tail call <4 x float> @llvm.amdgcn.mfma.f32.16x16x32.f16(<8 x half> %223, <8 x half> %213, <4 x float> %228, i32 0, i32 0, i32 0)
+  %230 = extractelement <4 x float> %229, i64 0
+  %231 = extractelement <4 x float> %229, i64 1
+  %232 = extractelement <4 x float> %229, i64 2
+  %233 = extractelement <4 x float> %229, i64 3
+  fence syncscope("workgroup") release, !mmra !83
+  tail call void @llvm.amdgcn.s.barrier()
+  fence syncscope("workgroup") acquire, !mmra !83
+  store <4 x i32> %211, ptr addrspace(3) %65, align 16
+  store <4 x i32> %221, ptr addrspace(3) %68, align 16
+  %234 = add nuw nsw i32 %205, 1
+  %epil.iter.next = add i32 %epil.iter, 1
+  %epil.iter.cmp.not = icmp eq i32 %epil.iter.next, %xtraiter
+  br i1 %epil.iter.cmp.not, label %._crit_edge, label %200, !llvm.loop !98
+
+._crit_edge:                                      ; preds = %._crit_edge.loopexit.unr-lcssa, %200, %.._crit_edge_crit_edge
+  %.pre-phi73 = phi i32 [ %.pre72, %.._crit_edge_crit_edge ], [ %91, %200 ], [ %91, %._crit_edge.loopexit.unr-lcssa ]
+  %.pre-phi71 = phi i32 [ %.pre70, %.._crit_edge_crit_edge ], [ %89, %200 ], [ %89, %._crit_edge.loopexit.unr-lcssa ]
+  %.pre-phi63 = phi i32 [ %.pre62, %.._crit_edge_crit_edge ], [ %83, %200 ], [ %83, %._crit_edge.loopexit.unr-lcssa ]
+  %.pre-phi57 = phi i32 [ %.pre56, %.._crit_edge_crit_edge ], [ %79, %200 ], [ %79, %._crit_edge.loopexit.unr-lcssa ]
+  %.pre-phi55 = phi i32 [ %.pre54, %.._crit_edge_crit_edge ], [ %77, %200 ], [ %77, %._crit_edge.loopexit.unr-lcssa ]
+  %235 = phi float [ 0.000000e+00, %.._crit_edge_crit_edge ], [ %195, %._crit_edge.loopexit.unr-lcssa ], [ %230, %200 ]
+  %236 = phi float [ 0.000000e+00, %.._crit_edge_crit_edge ], [ %196, %._crit_edge.loopexit.unr-lcssa ], [ %231, %200 ]
+  %237 = phi float [ 0.000000e+00, %.._crit_edge_crit_edge ], [ %197, %._crit_edge.loopexit.unr-lcssa ], [ %232, %200 ]
+  %238 = phi float [ 0.000000e+00, %.._crit_edge_crit_edge ], [ %198, %._crit_edge.loopexit.unr-lcssa ], [ %233, %200 ]
+  %239 = getelementptr inbounds nuw i8, ptr addrspace(3) @global_smem, i32 %.pre-phi55
+  %240 = getelementptr inbounds nuw i8, ptr addrspace(3) @global_smem, i32 %.pre-phi57
+  %241 = icmp eq i32 %.pre-phi63, 0
+  %242 = select i1 %241, i32 0, i32 544
+  %243 = xor i32 %.pre-phi71, %242
+  %244 = or disjoint i32 %.pre-phi73, %243
+  %245 = or disjoint i32 %244, %37
+  %246 = getelementptr inbounds nuw i8, ptr addrspace(3) getelementptr (i8, ptr addrspace(3) @global_smem, i32 4096), i32 %245
+  %247 = getelementptr inbounds nuw i8, ptr addrspace(3) %246, i32 2048
+  %248 = xor i32 %245, 272
+  %249 = getelementptr inbounds nuw i8, ptr addrspace(3) getelementptr (i8, ptr addrspace(3) @global_smem, i32 4096), i32 %248
+  %250 = getelementptr inbounds nuw i8, ptr addrspace(3) %249, i32 2048
+  fence syncscope("workgroup") release, !mmra !83
+  tail call void @llvm.amdgcn.s.barrier()
+  fence syncscope("workgroup") acquire, !mmra !83
+  %251 = load <8 x half>, ptr addrspace(3) %239, align 16
+  %252 = load <8 x half>, ptr addrspace(3) %240, align 16
+  %253 = tail call <4 x half> @llvm.amdgcn.ds.read.tr16.b64.v4f16(ptr addrspace(3) %246)
+  %254 = tail call <4 x half> @llvm.amdgcn.ds.read.tr16.b64.v4f16(ptr addrspace(3) nonnull %247)
+  %255 = tail call <4 x half> @llvm.amdgcn.ds.read.tr16.b64.v4f16(ptr addrspace(3) %249)
+  %256 = tail call <4 x half> @llvm.amdgcn.ds.read.tr16.b64.v4f16(ptr addrspace(3) nonnull %250)
+  %257 = shufflevector <4 x half> %253, <4 x half> %255, <8 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7>
+  %258 = shufflevector <4 x half> %254, <4 x half> %256, <8 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7>
+  %259 = insertelement <4 x float> poison, float %235, i64 0
+  %260 = insertelement <4 x float> %259, float %236, i64 1
+  %261 = insertelement <4 x float> %260, float %237, i64 2
+  %262 = insertelement <4 x float> %261, float %238, i64 3
+  %263 = tail call <4 x float> @llvm.amdgcn.mfma.f32.16x16x32.f16(<8 x half> %257, <8 x half> %251, <4 x float> %262, i32 0, i32 0, i32 0)
+  %264 = tail call <4 x float> @llvm.amdgcn.mfma.f32.16x16x32.f16(<8 x half> %258, <8 x half> %252, <4 x float> %263, i32 0, i32 0, i32 0)
+  %265 = lshr exact i32 %40, 2
+  %266 = or disjoint i32 %43, %265
+  %267 = lshr exact i32 %39, 3
+  %268 = or disjoint i32 %267, %38
+  %269 = or disjoint i32 %32, %268
+  %270 = shufflevector <4 x float> %264, <4 x float> poison, <2 x i32> <i32 0, i32 1>
+  %271 = fptrunc <2 x float> %270 to <2 x half>
+  %272 = shufflevector <4 x float> %264, <4 x float> poison, <2 x i32> <i32 2, i32 3>
+  %273 = fptrunc <2 x float> %272 to <2 x half>
+  %reass.mul = mul i32 %269, %8
+  %274 = add i32 %266, %reass.mul
+  %275 = icmp slt i32 %269, %3
+  %276 = icmp slt i32 %266, %4
+  %277 = and i1 %275, %276
+  %278 = tail call ptr addrspace(8) @llvm.amdgcn.make.buffer.rsrc.p8.p1.i32(ptr addrspace(1) %2, i16 0, i32 2147483646, i32 159744)
+  %279 = shufflevector <2 x half> %271, <2 x half> %273, <4 x i32> <i32 0, i32 1, i32 2, i32 3>
+  %280 = bitcast <4 x half> %279 to <2 x i32>
+  %281 = shl i32 %274, 1
+  %282 = select i1 %277, i32 %281, i32 -2147483648
+  tail call void @llvm.amdgcn.raw.ptr.buffer.store.v2i32(<2 x i32> %280, ptr addrspace(8) %278, i32 %282, i32 0, i32 0)
+  ret void
+}
+
+; Function Attrs: mustprogress nocallback nofree nosync nounwind speculatable willreturn memory(none)
+declare noundef range(i32 0, 1024) i32 @llvm.amdgcn.workitem.id.x() #1
+
+; Function Attrs: convergent mustprogress nocallback nocreateundeforpoison nofree nounwind willreturn memory(none)
+declare i32 @llvm.amdgcn.readfirstlane.i32(i32) #2
+
+; Function Attrs: mustprogress nocallback nofree nosync nounwind speculatable willreturn memory(none)
+declare noundef i32 @llvm.amdgcn.workgroup.id.x() #1
+
+; Function Attrs: mustprogress nocallback nocreateundeforpoison nofree nosync nounwind speculatable willreturn memory(none)
+declare i32 @llvm.smin.i32(i32, i32) #3
+
+; Function Attrs: mustprogress nocallback nofree nosync nounwind willreturn memory(inaccessiblemem: write)
+declare void @llvm.assume(i1 noundef) #4
+
+; Function Attrs: mustprogress nocallback nofree nosync nounwind willreturn memory(argmem: read)
+declare <4 x i32> @llvm.amdgcn.raw.ptr.buffer.load.v4i32(ptr addrspace(8) readonly captures(none), i32, i32, i32 immarg) #5
+
+; Function Attrs: mustprogress nocallback nofree nosync nounwind willreturn memory(argmem: write)
+declare void @llvm.amdgcn.raw.ptr.buffer.store.v2i32(<2 x i32>, ptr addrspace(8) writeonly captures(none), i32, i32, i32 immarg) #6
+
+; Function Attrs: convergent mustprogress nocallback nofree nounwind willreturn
+declare void @llvm.amdgcn.s.barrier() #7
+
+; Function Attrs: convergent mustprogress nocallback nofree nounwind willreturn memory(argmem: read)
+declare <4 x half> @llvm.amdgcn.ds.read.tr16.b64.v4f16(ptr addrspace(3) captures(none)) #8
+
+; Function Attrs: convergent mustprogress nocallback nocreateundeforpoison nofree nosync nounwind willreturn memory(none)
+declare <4 x float> @llvm.amdgcn.mfma.f32.16x16x32.f16(<8 x half>, <8 x half>, <4 x float>, i32 immarg, i32 immarg, i32 immarg) #9
+
+; Function Attrs: nocallback nocreateundeforpoison nofree nosync nounwind speculatable willreturn memory(none)
+declare ptr addrspace(8) @llvm.amdgcn.make.buffer.rsrc.p8.p1.i32(ptr addrspace(1) readnone, i16, i32, i32) #10
+
+attributes #0 = { norecurse nounwind "amdgpu-agpr-alloc"="0" "amdgpu-cluster-dims"="1,1,1" "amdgpu-flat-work-group-size"="1,256" "amdgpu-no-cluster-id-x" "amdgpu-no-cluster-id-y" "amdgpu-no-cluster-id-z" "amdgpu-no-completion-action" "amdgpu-no-default-queue" "amdgpu-no-dispatch-id" "amdgpu-no-dispatch-ptr" "amdgpu-no-flat-scratch-init" "amdgpu-no-heap-ptr" "amdgpu-no-hostcall-ptr" "amdgpu-no-implicitarg-ptr" "amdgpu-no-lds-kernel-id" "amdgpu-no-multigrid-sync-arg" "amdgpu-no-queue-ptr" "amdgpu-no-workgroup-id-x" "amdgpu-no-workgroup-id-y" "amdgpu-no-workgroup-id-z" "amdgpu-no-workitem-id-x" "amdgpu-no-workitem-id-y" "amdgpu-no-workitem-id-z" "amdgpu-no-wwm" "amdgpu-waves-per-eu"="4,4" "denormal-fp-math-f32"="ieee" "uniform-work-group-size" }
+attributes #1 = { mustprogress nocallback nofree nosync nounwind speculatable willreturn memory(none) }
+attributes #2 = { convergent mustprogress nocallback nocreateundeforpoison nofree nounwind willreturn memory(none) }
+attributes #3 = { mustprogress nocallback nocreateundeforpoison nofree nosync nounwind speculatable willreturn memory(none) }
+attributes #4 = { mustprogress nocallback nofree nosync nounwind willreturn memory(inaccessiblemem: write) }
+attributes #5 = { mustprogress nocallback nofree nosync nounwind willreturn memory(argmem: read) }
+attributes #6 = { mustprogress nocallback nofree nosync nounwind willreturn memory(argmem: write) }
+attributes #7 = { convergent mustprogress nocallback nofree nounwind willreturn }
+attributes #8 = { convergent mustprogress nocallback nofree nounwind willreturn memory(argmem: read) }
+attributes #9 = { convergent mustprogress nocallback nocreateundeforpoison nofree nosync nounwind willreturn memory(none) }
+attributes #10 = { nocallback nocreateundeforpoison nofree nosync nounwind speculatable willreturn memory(none) }
+
+!llvm.module.flags = !{!94, !95}
+
+!83 = !{!"amdgpu-synchronize-as", !"local"}
+!94 = !{i32 2, !"Debug Info Version", i32 3}
+!95 = !{i32 1, !"amdhsa_code_object_version", i32 500}
+!97 = !{!"llvm.loop.unroll.disable"}
+!98 = distinct !{!98, !97}

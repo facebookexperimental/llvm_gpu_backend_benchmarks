@@ -1,0 +1,91 @@
+module attributes {"ttg.cluster-dim-x" = 1 : i32, "ttg.cluster-dim-y" = 1 : i32, "ttg.cluster-dim-z" = 1 : i32, "ttg.num-ctas" = 1 : i32, "ttg.num-warps" = 1 : i32, ttg.target = "hip:gfx950", "ttg.threads-per-warp" = 64 : i32} {
+  tt.func public @_varlen_build_compact_schedules(%CuQ: !tt.ptr<i32> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %CuK: !tt.ptr<i32> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %QBlockSequence: !tt.ptr<i32> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %QBlockStart: !tt.ptr<i32> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %FullKVBlockSequence: !tt.ptr<i32> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %FullKVBlockStart: !tt.ptr<i32> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %TailKVBlockSequence: !tt.ptr<i32> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %TailKVBlockStart: !tt.ptr<i32> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %WideKVStart: !tt.ptr<i32> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %WideQStart: !tt.ptr<i32> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %WideDQStart: !tt.ptr<i32> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %WideQLen: !tt.ptr<i32> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %WideKVValid: !tt.ptr<i32> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %TaskCounts: !tt.ptr<i32> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}) attributes {noinline = false} {
+    %c0_i32 = arith.constant 0 : i32
+    %c255_i32 = arith.constant 255 : i32
+    %c15_i32 = arith.constant 15 : i32
+    %c256_i32 = arith.constant 256 : i32
+    %c3_i32 = arith.constant 3 : i32
+    %c2_i32 = arith.constant 2 : i32
+    %c16_i32 = arith.constant 16 : i32
+    %true = arith.constant true
+    %c128_i32 = arith.constant 128 : i32
+    %c1_i32 = arith.constant 1 : i32
+    %c4_i32 = arith.constant 4 : i32
+    %0 = tt.addptr %TaskCounts, %c4_i32 : !tt.ptr<i32>, i32
+    %1 = tt.load %0 : !tt.ptr<i32>
+    %2 = arith.cmpi ne, %1, %c0_i32 : i32
+    cf.cond_br %2, ^bb1, ^bb2
+  ^bb1:  // pred: ^bb0
+    tt.return
+  ^bb2:  // pred: ^bb0
+    %sequence = tt.get_program_id x : i32
+    %q_start = tt.addptr %CuQ, %sequence : !tt.ptr<i32>, i32
+    %q_start_0 = tt.load %q_start : !tt.ptr<i32>
+    %q_end = arith.addi %sequence, %c1_i32 : i32
+    %q_end_1 = tt.addptr %CuQ, %q_end : !tt.ptr<i32>, i32
+    %q_end_2 = tt.load %q_end_1 : !tt.ptr<i32>
+    %kv_start = tt.addptr %CuK, %sequence : !tt.ptr<i32>, i32
+    %kv_start_3 = tt.load %kv_start : !tt.ptr<i32>
+    %kv_end = tt.addptr %CuK, %q_end : !tt.ptr<i32>, i32
+    %kv_end_4 = tt.load %kv_end : !tt.ptr<i32>
+    %q_len = arith.subi %q_end_2, %q_start_0 : i32
+    %kv_len = arith.subi %kv_end_4, %kv_start_3 : i32
+    %q_blocks = arith.addi %q_len, %c15_i32 : i32
+    %q_blocks_5 = arith.divsi %q_blocks, %c16_i32 : i32
+    %full_kv_blocks = arith.divsi %kv_len, %c128_i32 : i32
+    %has_kv_tail = arith.remsi %kv_len, %c128_i32 : i32
+    %has_kv_tail_6 = arith.cmpi ne, %has_kv_tail, %c0_i32 : i32
+    %wide_kv_blocks = arith.addi %kv_len, %c255_i32 : i32
+    %wide_kv_blocks_7 = arith.divsi %wide_kv_blocks, %c256_i32 : i32
+    %q_base = tt.atomic_rmw add, relaxed, gpu, %TaskCounts, %q_blocks_5, %true : (!tt.ptr<i32>, i32, i1) -> i32
+    scf.for %block = %c0_i32 to %q_blocks_5 step %c1_i32  : i32 {
+      %5 = arith.addi %q_base, %block : i32
+      %6 = tt.addptr %QBlockSequence, %5 : !tt.ptr<i32>, i32
+      tt.store %6, %sequence : !tt.ptr<i32>
+      %7 = arith.muli %block, %c16_i32 : i32
+      %8 = tt.addptr %QBlockStart, %5 : !tt.ptr<i32>, i32
+      tt.store %8, %7 : !tt.ptr<i32>
+    }
+    %full_kv_base = tt.addptr %TaskCounts, %c1_i32 : !tt.ptr<i32>, i32
+    %full_kv_base_8 = tt.atomic_rmw add, relaxed, gpu, %full_kv_base, %full_kv_blocks, %true : (!tt.ptr<i32>, i32, i1) -> i32
+    scf.for %block = %c0_i32 to %full_kv_blocks step %c1_i32  : i32 {
+      %5 = arith.addi %full_kv_base_8, %block : i32
+      %6 = tt.addptr %FullKVBlockSequence, %5 : !tt.ptr<i32>, i32
+      tt.store %6, %sequence : !tt.ptr<i32>
+      %7 = arith.muli %block, %c128_i32 : i32
+      %8 = tt.addptr %FullKVBlockStart, %5 : !tt.ptr<i32>, i32
+      tt.store %8, %7 : !tt.ptr<i32>
+    }
+    scf.if %has_kv_tail_6 {
+      %tail_kv_task = tt.addptr %TaskCounts, %c2_i32 : !tt.ptr<i32>, i32
+      %tail_kv_task_10 = tt.atomic_rmw add, relaxed, gpu, %tail_kv_task, %c1_i32, %true : (!tt.ptr<i32>, i32, i1) -> i32
+      %5 = tt.addptr %TailKVBlockSequence, %tail_kv_task_10 : !tt.ptr<i32>, i32
+      tt.store %5, %sequence : !tt.ptr<i32>
+      %6 = arith.muli %full_kv_blocks, %c128_i32 : i32
+      %7 = tt.addptr %TailKVBlockStart, %tail_kv_task_10 : !tt.ptr<i32>, i32
+      tt.store %7, %6 : !tt.ptr<i32>
+    }
+    %wide_base = tt.addptr %TaskCounts, %c3_i32 : !tt.ptr<i32>, i32
+    %wide_base_9 = tt.atomic_rmw add, relaxed, gpu, %wide_base, %wide_kv_blocks_7, %true : (!tt.ptr<i32>, i32, i1) -> i32
+    %3 = arith.muli %sequence, %c15_i32 : i32
+    %4 = arith.addi %q_start_0, %3 : i32
+    scf.for %block = %c0_i32 to %wide_kv_blocks_7 step %c1_i32  : i32 {
+      %block_start = arith.muli %block, %c256_i32 : i32
+      %task = arith.addi %wide_base_9, %block : i32
+      %5 = arith.addi %kv_start_3, %block_start : i32
+      %6 = tt.addptr %WideKVStart, %task : !tt.ptr<i32>, i32
+      tt.store %6, %5 : !tt.ptr<i32>
+      %7 = tt.addptr %WideQStart, %task : !tt.ptr<i32>, i32
+      tt.store %7, %q_start_0 : !tt.ptr<i32>
+      %8 = tt.addptr %WideDQStart, %task : !tt.ptr<i32>, i32
+      tt.store %8, %4 : !tt.ptr<i32>
+      %9 = tt.addptr %WideQLen, %task : !tt.ptr<i32>, i32
+      tt.store %9, %q_len : !tt.ptr<i32>
+      %10 = arith.subi %kv_len, %block_start : i32
+      %11 = arith.minsi %10, %c256_i32 : i32
+      %12 = tt.addptr %WideKVValid, %task : !tt.ptr<i32>, i32
+      tt.store %12, %11 : !tt.ptr<i32>
+    }
+    tt.return
+  }
+}

@@ -1,0 +1,106 @@
+module attributes {"ttg.cluster-dim-x" = 1 : i32, "ttg.cluster-dim-y" = 1 : i32, "ttg.cluster-dim-z" = 1 : i32} {
+  tt.func public @_moe_gemm_kernel(%a_ptr: !tt.ptr<bf16> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %b_ptr: !tt.ptr<bf16> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %c_ptr: !tt.ptr<bf16> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %sorted_ids_ptr: !tt.ptr<i32> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %expert_ids_ptr: !tt.ptr<i32> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %num_post_padded_ptr: !tt.ptr<i32> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %num_valid_tokens: i32, %stride_am: i32 {tt.divisibility = 16 : i32}, %stride_be: i32 {tt.divisibility = 16 : i32}, %stride_bn: i32 {tt.divisibility = 16 : i32}, %stride_cm: i32 {tt.divisibility = 16 : i32}, %stride_ck: i32 {tt.divisibility = 16 : i32}) attributes {noinline = false} {
+    %c64_i32 = arith.constant 64 : i32
+    %cst = arith.constant dense<0.000000e+00> : tensor<16x32xf32>
+    %cst_0 = arith.constant dense<0.000000e+00> : tensor<16x64xbf16>
+    %num_pid_m = arith.constant 15 : i32
+    %c0_i32 = arith.constant 0 : i32
+    %c32_i32 = arith.constant 32 : i32
+    %c0_i64 = arith.constant 0 : i64
+    %c16_i32 = arith.constant 16 : i32
+    %c128_i32 = arith.constant 128 : i32
+    %c1_i32 = arith.constant 1 : i32
+    %pid = tt.get_program_id x : i32
+    %num_tokens_post_padded = tt.load %num_post_padded_ptr : !tt.ptr<i32>
+    %num_pid_m_1 = arith.addi %num_tokens_post_padded, %num_pid_m : i32
+    %num_pid_m_2 = arith.divsi %num_pid_m_1, %c16_i32 : i32
+    %0 = arith.muli %num_pid_m_2, %c128_i32 : i32
+    %1 = arith.cmpi sge, %pid, %0 : i32
+    cf.cond_br %1, ^bb1, ^bb2
+  ^bb1:  // 2 preds: ^bb0, ^bb2
+    tt.return
+  ^bb2:  // pred: ^bb0
+    %group_id = arith.divsi %pid, %c128_i32 : i32
+    %group_size_m = arith.subi %num_pid_m_2, %group_id : i32
+    %group_size_m_3 = arith.minsi %group_size_m, %c1_i32 : i32
+    %pid_m = arith.remsi %pid, %c128_i32 : i32
+    %pid_m_4 = arith.remsi %pid_m, %group_size_m_3 : i32
+    %pid_m_5 = arith.addi %group_id, %pid_m_4 : i32
+    %pid_n = arith.divsi %pid_m, %group_size_m_3 : i32
+    %offs_token_id = arith.muli %pid_m_5, %c16_i32 : i32
+    %offs_token_id_6 = tt.make_range {end = 16 : i32, start = 0 : i32} : tensor<16xi32>
+    %offs_token_id_7 = tt.splat %offs_token_id : i32 -> tensor<16xi32>
+    %offs_token_id_8 = arith.addi %offs_token_id_7, %offs_token_id_6 : tensor<16xi32>
+    %offs_token = tt.splat %sorted_ids_ptr : !tt.ptr<i32> -> tensor<16x!tt.ptr<i32>>
+    %offs_token_9 = tt.addptr %offs_token, %offs_token_id_8 : tensor<16x!tt.ptr<i32>>, tensor<16xi32>
+    %offs_token_10 = tt.load %offs_token_9 : tensor<16x!tt.ptr<i32>>
+    %token_mask = tt.splat %num_valid_tokens : i32 -> tensor<16xi32>
+    %token_mask_11 = arith.cmpi slt, %offs_token_10, %token_mask : tensor<16xi32>
+    %off_expert = tt.addptr %expert_ids_ptr, %pid_m_5 : !tt.ptr<i32>, i32
+    %off_expert_12 = tt.load %off_expert : !tt.ptr<i32>
+    %off_expert_13 = arith.extsi %off_expert_12 : i32 to i64
+    %2 = arith.cmpi slt, %off_expert_13, %c0_i64 : i64
+    cf.cond_br %2, ^bb1, ^bb3
+  ^bb3:  // pred: ^bb2
+    %offs_bn = arith.muli %pid_n, %c32_i32 : i32
+    %offs_bn_14 = tt.make_range {end = 32 : i32, start = 0 : i32} : tensor<32xi32>
+    %offs_bn_15 = tt.splat %offs_bn : i32 -> tensor<32xi32>
+    %offs_bn_16 = arith.addi %offs_bn_15, %offs_bn_14 : tensor<32xi32>
+    %b_base = arith.extsi %stride_be : i32 to i64
+    %b_base_17 = arith.muli %off_expert_13, %b_base : i64
+    %b_base_18 = tt.addptr %b_ptr, %b_base_17 : !tt.ptr<bf16>, i64
+    %3 = arith.extsi %offs_token_10 : tensor<16xi32> to tensor<16xi64>
+    %4 = arith.extsi %offs_bn_16 : tensor<32xi32> to tensor<32xi64>
+    %offs_k = tt.make_range {end = 64 : i32, start = 0 : i32} : tensor<64xi32>
+    %a_offsets = tt.expand_dims %3 {axis = 1 : i32} : tensor<16xi64> -> tensor<16x1xi64>
+    %a_offsets_19 = arith.extsi %stride_am : i32 to i64
+    %a_offsets_20 = tt.splat %a_offsets_19 : i64 -> tensor<16x1xi64>
+    %a_offsets_21 = arith.muli %a_offsets, %a_offsets_20 : tensor<16x1xi64>
+    %a_offsets_22 = tt.expand_dims %offs_k {axis = 0 : i32} : tensor<64xi32> -> tensor<1x64xi32>
+    %a_offsets_23 = tt.broadcast %a_offsets_21 : tensor<16x1xi64> -> tensor<16x64xi64>
+    %b_ptrs = tt.expand_dims %offs_k {axis = 1 : i32} : tensor<64xi32> -> tensor<64x1xi32>
+    %b_ptrs_24 = tt.splat %b_base_18 : !tt.ptr<bf16> -> tensor<64x1x!tt.ptr<bf16>>
+    %b_ptrs_25 = tt.expand_dims %4 {axis = 0 : i32} : tensor<32xi64> -> tensor<1x32xi64>
+    %b_ptrs_26 = arith.extsi %stride_bn : i32 to i64
+    %b_ptrs_27 = tt.splat %b_ptrs_26 : i64 -> tensor<1x32xi64>
+    %b_ptrs_28 = arith.muli %b_ptrs_25, %b_ptrs_27 : tensor<1x32xi64>
+    %b_ptrs_29 = tt.broadcast %b_ptrs_28 : tensor<1x32xi64> -> tensor<64x32xi64>
+    %a_ptrs = tt.splat %a_ptr : !tt.ptr<bf16> -> tensor<16x64x!tt.ptr<bf16>>
+    %a = tt.expand_dims %token_mask_11 {axis = 1 : i32} : tensor<16xi1> -> tensor<16x1xi1>
+    %a_30 = tt.broadcast %a : tensor<16x1xi1> -> tensor<16x64xi1>
+    %acc = scf.for %k_idx = %c0_i32 to %c64_i32 step %c1_i32 iter_args(%acc_41 = %cst) -> (tensor<16x32xf32>)  : i32 {
+      %k = arith.muli %k_idx, %c64_i32 : i32
+      %a_offsets_42 = tt.splat %k : i32 -> tensor<1x64xi32>
+      %a_offsets_43 = arith.addi %a_offsets_42, %a_offsets_22 : tensor<1x64xi32>
+      %a_offsets_44 = arith.extsi %a_offsets_43 : tensor<1x64xi32> to tensor<1x64xi64>
+      %a_offsets_45 = tt.broadcast %a_offsets_44 : tensor<1x64xi64> -> tensor<16x64xi64>
+      %a_offsets_46 = arith.addi %a_offsets_23, %a_offsets_45 : tensor<16x64xi64>
+      %b_ptrs_47 = tt.splat %k : i32 -> tensor<64x1xi32>
+      %b_ptrs_48 = arith.addi %b_ptrs_47, %b_ptrs : tensor<64x1xi32>
+      %b_ptrs_49 = tt.addptr %b_ptrs_24, %b_ptrs_48 : tensor<64x1x!tt.ptr<bf16>>, tensor<64x1xi32>
+      %b_ptrs_50 = tt.broadcast %b_ptrs_49 : tensor<64x1x!tt.ptr<bf16>> -> tensor<64x32x!tt.ptr<bf16>>
+      %b_ptrs_51 = tt.addptr %b_ptrs_50, %b_ptrs_29 : tensor<64x32x!tt.ptr<bf16>>, tensor<64x32xi64>
+      %a_ptrs_52 = tt.addptr %a_ptrs, %a_offsets_46 : tensor<16x64x!tt.ptr<bf16>>, tensor<16x64xi64>
+      %a_53 = tt.load %a_ptrs_52, %a_30, %cst_0 : tensor<16x64x!tt.ptr<bf16>>
+      %b = tt.load %b_ptrs_51 {cachePolicy = #tt.cache_policy<cache_modifier = cg, eviction_policy = evict_normal>} : tensor<64x32x!tt.ptr<bf16>>
+      %acc_54 = tt.dot %a_53, %b, %acc_41 : tensor<16x64xbf16> * tensor<64x32xbf16> -> tensor<16x32xf32>
+      scf.yield %acc_54 : tensor<16x32xf32>
+    }
+    %c = arith.truncf %acc : tensor<16x32xf32> to tensor<16x32xbf16>
+    %c_ptrs = tt.expand_dims %offs_token_10 {axis = 1 : i32} : tensor<16xi32> -> tensor<16x1xi32>
+    %c_ptrs_31 = arith.extsi %c_ptrs : tensor<16x1xi32> to tensor<16x1xi64>
+    %c_ptrs_32 = arith.extsi %stride_cm : i32 to i64
+    %c_ptrs_33 = tt.splat %c_ptrs_32 : i64 -> tensor<16x1xi64>
+    %c_ptrs_34 = arith.muli %c_ptrs_31, %c_ptrs_33 : tensor<16x1xi64>
+    %c_ptrs_35 = tt.splat %c_ptr : !tt.ptr<bf16> -> tensor<16x1x!tt.ptr<bf16>>
+    %c_ptrs_36 = tt.addptr %c_ptrs_35, %c_ptrs_34 : tensor<16x1x!tt.ptr<bf16>>, tensor<16x1xi64>
+    %c_ptrs_37 = tt.expand_dims %offs_bn_16 {axis = 0 : i32} : tensor<32xi32> -> tensor<1x32xi32>
+    %c_ptrs_38 = tt.broadcast %c_ptrs_36 : tensor<16x1x!tt.ptr<bf16>> -> tensor<16x32x!tt.ptr<bf16>>
+    %c_ptrs_39 = tt.broadcast %c_ptrs_37 : tensor<1x32xi32> -> tensor<16x32xi32>
+    %c_ptrs_40 = tt.addptr %c_ptrs_38, %c_ptrs_39 : tensor<16x32x!tt.ptr<bf16>>, tensor<16x32xi32>
+    %5 = tt.expand_dims %token_mask_11 {axis = 1 : i32} : tensor<16xi1> -> tensor<16x1xi1>
+    %6 = tt.broadcast %5 : tensor<16x1xi1> -> tensor<16x32xi1>
+    tt.store %c_ptrs_40, %c, %6 : tensor<16x32x!tt.ptr<bf16>>
+    tt.return
+  }
+}

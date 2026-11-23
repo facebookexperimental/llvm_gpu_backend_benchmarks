@@ -1,0 +1,77 @@
+module attributes {"ttg.cluster-dim-x" = 1 : i32, "ttg.cluster-dim-y" = 1 : i32, "ttg.cluster-dim-z" = 1 : i32} {
+  tt.func public @_persistent_kernel(%BRANCH: !tt.ptr<bf16> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %STREAM: !tt.ptr<f32> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %OUTPUT: !tt.ptr<bf16> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %NEW_STREAM: !tt.ptr<f32> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %POST_WEIGHT: !tt.ptr<bf16> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %PRE_WEIGHT: !tt.ptr<bf16> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %ALPHA: !tt.ptr<f32> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %BETA: !tt.ptr<f32> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %rows: i32 {tt.divisibility = 16 : i32}, %post_eps: f32, %pre_eps: f32) attributes {noinline = false} {
+    %cst = arith.constant dense<0.000000e+00> : tensor<8192xf32>
+    %cst_0 = arith.constant 8.192000e+03 : f32
+    %cst_1 = arith.constant dense<0.000000e+00> : tensor<8192xbf16>
+    %cst_2 = arith.constant dense<8192> : tensor<8192xi32>
+    %c8192_i32 = arith.constant 8192 : i32
+    %pid = tt.get_program_id x : i32
+    %programs = tt.get_num_programs x : i32
+    %offs = tt.make_range {end = 8192 : i32, start = 0 : i32} : tensor<8192xi32>
+    %mask = arith.cmpi slt, %offs, %cst_2 : tensor<8192xi32>
+    %alpha = tt.splat %ALPHA : !tt.ptr<f32> -> tensor<8192x!tt.ptr<f32>>
+    %alpha_3 = tt.addptr %alpha, %offs : tensor<8192x!tt.ptr<f32>>, tensor<8192xi32>
+    %alpha_4 = tt.load %alpha_3 : tensor<8192x!tt.ptr<f32>>
+    %beta = tt.splat %BETA : !tt.ptr<f32> -> tensor<8192x!tt.ptr<f32>>
+    %beta_5 = tt.addptr %beta, %offs : tensor<8192x!tt.ptr<f32>>, tensor<8192xi32>
+    %beta_6 = tt.load %beta_5 : tensor<8192x!tt.ptr<f32>>
+    %pre_weight = tt.splat %PRE_WEIGHT : !tt.ptr<bf16> -> tensor<8192x!tt.ptr<bf16>>
+    %pre_weight_7 = tt.addptr %pre_weight, %offs : tensor<8192x!tt.ptr<bf16>>, tensor<8192xi32>
+    %pre_weight_8 = tt.load %pre_weight_7 : tensor<8192x!tt.ptr<bf16>>
+    %pre_weight_9 = arith.extf %pre_weight_8 : tensor<8192xbf16> to tensor<8192xf32>
+    scf.for %row = %pid to %rows step %programs  : i32 {
+      %base = arith.muli %row, %c8192_i32 : i32
+      %branch = tt.addptr %BRANCH, %base : !tt.ptr<bf16>, i32
+      %branch_10 = tt.splat %branch : !tt.ptr<bf16> -> tensor<8192x!tt.ptr<bf16>>
+      %branch_11 = tt.addptr %branch_10, %offs : tensor<8192x!tt.ptr<bf16>>, tensor<8192xi32>
+      %branch_12 = tt.load %branch_11, %mask, %cst_1 {cachePolicy = #tt.cache_policy<cache_modifier = cg, eviction_policy = evict_normal>} : tensor<8192x!tt.ptr<bf16>>
+      %stream = tt.addptr %STREAM, %base : !tt.ptr<f32>, i32
+      %stream_13 = tt.splat %stream : !tt.ptr<f32> -> tensor<8192x!tt.ptr<f32>>
+      %stream_14 = tt.addptr %stream_13, %offs : tensor<8192x!tt.ptr<f32>>, tensor<8192xi32>
+      %stream_15 = tt.load %stream_14 {cachePolicy = #tt.cache_policy<cache_modifier = cg, eviction_policy = evict_normal>} : tensor<8192x!tt.ptr<f32>>
+      %post_input = arith.extf %branch_12 : tensor<8192xbf16> to tensor<8192xf32>
+      %post_sum = arith.mulf %post_input, %post_input : tensor<8192xf32>
+      %post_sum_16 = arith.select %mask, %post_sum, %cst : tensor<8192xi1>, tensor<8192xf32>
+      %post_sum_17 = tt.reshape %post_sum_16 allow_reorder : tensor<8192xf32> -> tensor<8192xf32>
+      %post_sum_18 = "tt.reduce"(%post_sum_17) <{axis = 0 : i32, reduction_ordering = "unordered"}> ({
+      ^bb0(%post_sum_35: f32, %post_sum_36: f32):
+        %post_sum_37 = arith.addf %post_sum_35, %post_sum_36 : f32
+        tt.reduce.return %post_sum_37 : f32
+      }) : (tensor<8192xf32>) -> f32
+      %normed_branch = arith.divf %post_sum_18, %cst_0 : f32
+      %normed_branch_19 = arith.addf %normed_branch, %post_eps : f32
+      %normed_branch_20 = math.rsqrt %normed_branch_19 : f32
+      %normed_branch_21 = tt.splat %normed_branch_20 : f32 -> tensor<8192xf32>
+      %normed_branch_22 = arith.mulf %post_input, %normed_branch_21 : tensor<8192xf32>
+      %normed_branch_23 = arith.truncf %normed_branch_22 : tensor<8192xf32> to tensor<8192xbf16>
+      %normed_branch_24 = arith.extf %normed_branch_23 : tensor<8192xbf16> to tensor<8192xf32>
+      %new_stream = arith.mulf %alpha_4, %stream_15 : tensor<8192xf32>
+      %new_stream_25 = arith.mulf %beta_6, %normed_branch_24 : tensor<8192xf32>
+      %new_stream_26 = arith.addf %new_stream, %new_stream_25 : tensor<8192xf32>
+      %0 = tt.addptr %NEW_STREAM, %base : !tt.ptr<f32>, i32
+      %1 = tt.splat %0 : !tt.ptr<f32> -> tensor<8192x!tt.ptr<f32>>
+      %2 = tt.addptr %1, %offs : tensor<8192x!tt.ptr<f32>>, tensor<8192xi32>
+      tt.store %2, %new_stream_26, %mask {cachePolicy = #tt.cache_policy<cache_modifier = cs, eviction_policy = evict_normal>} : tensor<8192x!tt.ptr<f32>>
+      %pre_sum = arith.mulf %new_stream_26, %new_stream_26 : tensor<8192xf32>
+      %pre_sum_27 = arith.select %mask, %pre_sum, %cst : tensor<8192xi1>, tensor<8192xf32>
+      %pre_sum_28 = tt.reshape %pre_sum_27 allow_reorder : tensor<8192xf32> -> tensor<8192xf32>
+      %pre_sum_29 = "tt.reduce"(%pre_sum_28) <{axis = 0 : i32, reduction_ordering = "unordered"}> ({
+      ^bb0(%pre_sum_35: f32, %pre_sum_36: f32):
+        %pre_sum_37 = arith.addf %pre_sum_35, %pre_sum_36 : f32
+        tt.reduce.return %pre_sum_37 : f32
+      }) : (tensor<8192xf32>) -> f32
+      %normed = arith.divf %pre_sum_29, %cst_0 : f32
+      %normed_30 = arith.addf %normed, %pre_eps : f32
+      %normed_31 = math.rsqrt %normed_30 : f32
+      %normed_32 = tt.splat %normed_31 : f32 -> tensor<8192xf32>
+      %normed_33 = arith.mulf %new_stream_26, %normed_32 : tensor<8192xf32>
+      %normed_34 = arith.mulf %normed_33, %pre_weight_9 : tensor<8192xf32>
+      %3 = tt.addptr %OUTPUT, %base : !tt.ptr<bf16>, i32
+      %4 = tt.splat %3 : !tt.ptr<bf16> -> tensor<8192x!tt.ptr<bf16>>
+      %5 = tt.addptr %4, %offs : tensor<8192x!tt.ptr<bf16>>, tensor<8192xi32>
+      %6 = arith.truncf %normed_34 : tensor<8192xf32> to tensor<8192xbf16>
+      tt.store %5, %6, %mask {cachePolicy = #tt.cache_policy<cache_modifier = cs, eviction_policy = evict_normal>} : tensor<8192x!tt.ptr<bf16>>
+    }
+    tt.return
+  }
+}

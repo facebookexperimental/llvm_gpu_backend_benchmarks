@@ -1,0 +1,36 @@
+#blocked = #ttg.blocked<{sizePerThread = [8], threadsPerWarp = [64], warpsPerCTA = [16], order = [0]}>
+module attributes {"ttg.cluster-dim-x" = 1 : i32, "ttg.cluster-dim-y" = 1 : i32, "ttg.cluster-dim-z" = 1 : i32, "ttg.num-ctas" = 1 : i32, "ttg.num-warps" = 16 : i32, ttg.target = "hip:gfx950", "ttg.threads-per-warp" = 64 : i32} {
+  tt.func public @softmax_kernel(%output_ptr: !tt.ptr<f16> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %input_ptr: !tt.ptr<f16> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %input_row_stride: i32 {tt.divisibility = 16 : i32}, %output_row_stride: i32 {tt.divisibility = 16 : i32}, %n_cols: i32 {tt.divisibility = 16 : i32}) attributes {noinline = false} {
+    %row = arith.constant dense<0xFC00> : tensor<16384xf16, #blocked>
+    %row_idx = tt.get_program_id x : i32
+    %row_start_ptr = arith.muli %row_idx, %input_row_stride : i32
+    %col_offsets = tt.make_range {end = 16384 : i32, start = 0 : i32} : tensor<16384xi32, #blocked>
+    %input_ptrs = tt.splat %row_start_ptr : i32 -> tensor<16384xi32, #blocked>
+    %input_ptrs_0 = arith.addi %col_offsets, %input_ptrs : tensor<16384xi32, #blocked>
+    %row_1 = tt.splat %n_cols : i32 -> tensor<16384xi32, #blocked>
+    %row_2 = arith.cmpi slt, %col_offsets, %row_1 : tensor<16384xi32, #blocked>
+    %row_3 = amdg.buffer_load %input_ptr[%input_ptrs_0], %row_2, %row {contiguity = 8 : i32} : !tt.ptr<f16> -> tensor<16384xf16, #blocked>
+    %input = arith.extf %row_3 : tensor<16384xf16, #blocked> to tensor<16384xf32, #blocked>
+    %value = "tt.reduce"(%input) <{axis = 0 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%row_minus_max_7: f32, %row_minus_max_8: f32):
+      %value_9 = arith.maxnumf %row_minus_max_7, %row_minus_max_8 : f32
+      tt.reduce.return %value_9 : f32
+    }) : (tensor<16384xf32, #blocked>) -> f32
+    %row_minus_max = tt.splat %value : f32 -> tensor<16384xf32, #blocked>
+    %row_minus_max_4 = arith.subf %input, %row_minus_max : tensor<16384xf32, #blocked>
+    %numerator = math.exp %row_minus_max_4 : tensor<16384xf32, #blocked>
+    %denominator = "tt.reduce"(%numerator) <{axis = 0 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%denominator_7: f32, %denominator_8: f32):
+      %denominator_9 = arith.addf %denominator_7, %denominator_8 : f32
+      tt.reduce.return %denominator_9 : f32
+    }) : (tensor<16384xf32, #blocked>) -> f32
+    %softmax_output = tt.splat %denominator : f32 -> tensor<16384xf32, #blocked>
+    %softmax_output_5 = arith.divf %numerator, %softmax_output : tensor<16384xf32, #blocked>
+    %output_row_start_ptr = arith.muli %row_idx, %output_row_stride : i32
+    %output_ptrs = tt.splat %output_row_start_ptr : i32 -> tensor<16384xi32, #blocked>
+    %output_ptrs_6 = arith.addi %col_offsets, %output_ptrs : tensor<16384xi32, #blocked>
+    %0 = arith.truncf %softmax_output_5 : tensor<16384xf32, #blocked> to tensor<16384xf16, #blocked>
+    amdg.buffer_store %0, %output_ptr[%output_ptrs_6], %row_2 {contiguity = 8 : i32} : !tt.ptr<f16> -> tensor<16384xf16, #blocked>
+    tt.return
+  }
+}

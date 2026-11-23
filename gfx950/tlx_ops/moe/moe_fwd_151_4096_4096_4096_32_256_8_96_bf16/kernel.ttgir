@@ -1,0 +1,145 @@
+#blocked = #ttg.blocked<{sizePerThread = [4], threadsPerWarp = [64], warpsPerCTA = [8], order = [0]}>
+#blocked1 = #ttg.blocked<{sizePerThread = [1], threadsPerWarp = [64], warpsPerCTA = [8], order = [0]}>
+module attributes {"ttg.cluster-dim-x" = 1 : i32, "ttg.cluster-dim-y" = 1 : i32, "ttg.cluster-dim-z" = 1 : i32, "ttg.num-ctas" = 1 : i32, "ttg.num-warps" = 8 : i32, ttg.target = "hip:gfx950", "ttg.threads-per-warp" = 64 : i32} {
+  tt.func public @_align_kernel(%ids_ptr: !tt.ptr<i32> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %sorted_ptr: !tt.ptr<i32> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %expert_ptr: !tt.ptr<i32> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %num_post_ptr: !tt.ptr<i32> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %n: i32, %local_start: i32 {tt.divisibility = 16 : i32}, %cap: i32 {tt.divisibility = 16 : i32}, %num_blocks: i32) attributes {noinline = false} {
+    %c0_i32 = arith.constant 0 : i32
+    %cst = arith.constant dense<-1> : tensor<2048xi32, #blocked>
+    %cst_0 = arith.constant dense<-1> : tensor<2048xi32, #blocked1>
+    %padded = arith.constant dense<32> : tensor<64xi32, #blocked1>
+    %c16_i32 = arith.constant 16 : i32
+    %cst_1 = arith.constant dense<16> : tensor<64xi32, #blocked1>
+    %padded_2 = arith.constant dense<1> : tensor<64xi32, #blocked1>
+    %cst_3 = arith.constant dense<0> : tensor<64xi32, #blocked1>
+    %nb = arith.constant 15 : i32
+    %c2048_i32 = arith.constant 2048 : i32
+    %cst_4 = arith.constant dense<1> : tensor<2048xi32, #blocked>
+    %cst_5 = arith.constant dense<32> : tensor<2048xi32, #blocked>
+    %cst_6 = arith.constant dense<0> : tensor<2048xi32, #blocked>
+    %e = tt.get_program_id x : i32
+    %offs = tt.make_range {end = 2048 : i32, start = 0 : i32} : tensor<2048xi32, #blocked>
+    %offs_7 = tt.make_range {end = 2048 : i32, start = 0 : i32} : tensor<2048xi32, #blocked1>
+    %experts = tt.make_range {end = 64 : i32, start = 0 : i32} : tensor<64xi32, #blocked1>
+    %local = tt.splat %n : i32 -> tensor<2048xi32, #blocked>
+    %local_8 = tt.splat %local_start : i32 -> tensor<2048xi32, #blocked>
+    %counts = scf.for %c = %c0_i32 to %n step %c2048_i32 iter_args(%counts_24 = %cst_3) -> (tensor<64xi32, #blocked1>)  : i32 {
+      %slot = tt.splat %c : i32 -> tensor<2048xi32, #blocked>
+      %slot_25 = arith.addi %slot, %offs : tensor<2048xi32, #blocked>
+      %local_26 = arith.cmpi slt, %slot_25, %local : tensor<2048xi32, #blocked>
+      %local_27 = amdg.buffer_load %ids_ptr[%slot_25], %local_26, %cst : !tt.ptr<i32> -> tensor<2048xi32, #blocked>
+      %local_28 = arith.subi %local_27, %local_8 : tensor<2048xi32, #blocked>
+      %counts_29 = arith.cmpi sge, %local_28, %cst_6 : tensor<2048xi32, #blocked>
+      %counts_30 = arith.andi %local_26, %counts_29 : tensor<2048xi1, #blocked>
+      %counts_31 = arith.cmpi slt, %local_28, %cst_5 : tensor<2048xi32, #blocked>
+      %counts_32 = arith.andi %counts_30, %counts_31 : tensor<2048xi1, #blocked>
+      %counts_33 = arith.select %counts_32, %local_28, %cst_5 : tensor<2048xi1, #blocked>, tensor<2048xi32, #blocked>
+      %counts_34 = tt.histogram %counts_33 : tensor<2048xi32, #blocked> -> tensor<64xi32, #blocked1>
+      %counts_35 = arith.addi %counts_24, %counts_34 : tensor<64xi32, #blocked1>
+      scf.yield %counts_35 : tensor<64xi32, #blocked1>
+    }
+    %padded_9 = arith.cmpi slt, %experts, %padded : tensor<64xi32, #blocked1>
+    %padded_10 = arith.addi %counts, %cst_1 : tensor<64xi32, #blocked1>
+    %padded_11 = arith.subi %padded_10, %padded_2 : tensor<64xi32, #blocked1>
+    %padded_12 = arith.divsi %padded_11, %cst_1 : tensor<64xi32, #blocked1>
+    %padded_13 = arith.muli %padded_12, %cst_1 : tensor<64xi32, #blocked1>
+    %padded_14 = arith.select %padded_9, %padded_13, %cst_3 : tensor<64xi1, #blocked1>, tensor<64xi32, #blocked1>
+    %start = tt.splat %e : i32 -> tensor<64xi32, #blocked1>
+    %start_15 = arith.cmpi slt, %experts, %start : tensor<64xi32, #blocked1>
+    %start_16 = arith.select %start_15, %padded_14, %cst_3 : tensor<64xi1, #blocked1>, tensor<64xi32, #blocked1>
+    %start_17 = "tt.reduce"(%start_16) <{axis = 0 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%start_24: i32, %start_25: i32):
+      %start_26 = arith.addi %start_24, %start_25 : i32
+      tt.reduce.return %start_26 : i32
+    }) : (tensor<64xi32, #blocked1>) -> i32
+    %cnt = arith.cmpi eq, %experts, %start : tensor<64xi32, #blocked1>
+    %cnt_18 = arith.select %cnt, %counts, %cst_3 : tensor<64xi1, #blocked1>, tensor<64xi32, #blocked1>
+    %cnt_19 = "tt.reduce"(%cnt_18) <{axis = 0 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%cnt_24: i32, %cnt_25: i32):
+      %cnt_26 = arith.addi %cnt_24, %cnt_25 : i32
+      tt.reduce.return %cnt_26 : i32
+    }) : (tensor<64xi32, #blocked1>) -> i32
+    %nb_20 = arith.addi %cnt_19, %nb : i32
+    %nb_21 = arith.divsi %nb_20, %c16_i32 : i32
+    %hit = tt.splat %e : i32 -> tensor<2048xi32, #blocked>
+    %0 = tt.splat %start_17 : i32 -> tensor<2048xi32, #blocked>
+    %seen = scf.for %c = %c0_i32 to %n step %c2048_i32 iter_args(%seen_24 = %c0_i32) -> (i32)  : i32 {
+      %slot = tt.splat %c : i32 -> tensor<2048xi32, #blocked>
+      %slot_25 = tt.splat %c : i32 -> tensor<2048xi32, #blocked1>
+      %slot_26 = arith.addi %slot, %offs : tensor<2048xi32, #blocked>
+      %slot_27 = arith.addi %slot_25, %offs_7 : tensor<2048xi32, #blocked1>
+      %local_28 = arith.cmpi slt, %slot_26, %local : tensor<2048xi32, #blocked>
+      %local_29 = amdg.buffer_load %ids_ptr[%slot_26], %local_28, %cst : !tt.ptr<i32> -> tensor<2048xi32, #blocked>
+      %local_30 = arith.subi %local_29, %local_8 : tensor<2048xi32, #blocked>
+      %hit_31 = arith.cmpi eq, %local_30, %hit : tensor<2048xi32, #blocked>
+      %hit_32 = arith.andi %local_28, %hit_31 : tensor<2048xi1, #blocked>
+      %rank = arith.extui %hit_32 : tensor<2048xi1, #blocked> to tensor<2048xi32, #blocked>
+      %rank_33 = "tt.scan"(%rank) <{axis = 0 : i32, reverse = false}> ({
+      ^bb0(%rank_39: i32, %rank_40: i32):
+        %rank_41 = arith.addi %rank_39, %rank_40 : i32
+        tt.scan.return %rank_41 : i32
+      }) : (tensor<2048xi32, #blocked>) -> tensor<2048xi32, #blocked>
+      %rank_34 = tt.splat %seen_24 : i32 -> tensor<2048xi32, #blocked>
+      %rank_35 = arith.addi %rank_34, %rank_33 : tensor<2048xi32, #blocked>
+      %rank_36 = arith.subi %rank_35, %cst_4 : tensor<2048xi32, #blocked>
+      %13 = arith.addi %rank_36, %0 : tensor<2048xi32, #blocked>
+      %14 = ttg.convert_layout %13 : tensor<2048xi32, #blocked> -> tensor<2048xi32, #blocked1>
+      %15 = ttg.convert_layout %hit_32 : tensor<2048xi1, #blocked> -> tensor<2048xi1, #blocked1>
+      amdg.buffer_store %slot_27, %sorted_ptr[%14], %15 : !tt.ptr<i32> -> tensor<2048xi32, #blocked1>
+      %seen_37 = "tt.reduce"(%rank) <{axis = 0 : i32, reduction_ordering = "unordered"}> ({
+      ^bb0(%seen_39: i32, %seen_40: i32):
+        %seen_41 = arith.addi %seen_39, %seen_40 : i32
+        tt.reduce.return %seen_41 : i32
+      }) : (tensor<2048xi32, #blocked>) -> i32
+      %seen_38 = arith.addi %seen_24, %seen_37 : i32
+      scf.yield %seen_38 : i32
+    }
+    %pad = tt.make_range {end = 16 : i32, start = 0 : i32} : tensor<16xi32, #blocked1>
+    %pad_22 = tt.splat %cnt_19 : i32 -> tensor<16xi32, #blocked1>
+    %pad_23 = arith.addi %pad_22, %pad : tensor<16xi32, #blocked1>
+    %1 = arith.muli %nb_21, %c16_i32 : i32
+    %2 = tt.splat %1 : i32 -> tensor<16xi32, #blocked1>
+    %3 = arith.cmpi slt, %pad_23, %2 : tensor<16xi32, #blocked1>
+    %4 = tt.splat %start_17 : i32 -> tensor<16xi32, #blocked1>
+    %5 = arith.addi %pad, %4 : tensor<16xi32, #blocked1>
+    %6 = arith.addi %pad_22, %5 : tensor<16xi32, #blocked1>
+    %7 = tt.splat %n : i32 -> tensor<16xi32, #blocked1>
+    amdg.buffer_store %7, %sorted_ptr[%6], %3 : !tt.ptr<i32> -> tensor<16xi32, #blocked1>
+    %8 = tt.splat %nb_21 : i32 -> tensor<2048xi32, #blocked1>
+    %9 = arith.divsi %start_17, %c16_i32 : i32
+    %10 = tt.splat %9 : i32 -> tensor<2048xi32, #blocked1>
+    %11 = tt.splat %e : i32 -> tensor<2048xi32, #blocked1>
+    scf.for %b = %c0_i32 to %nb_21 step %c2048_i32  : i32 {
+      %bo = tt.splat %b : i32 -> tensor<2048xi32, #blocked1>
+      %bo_24 = arith.addi %bo, %offs_7 : tensor<2048xi32, #blocked1>
+      %13 = arith.cmpi slt, %bo_24, %8 : tensor<2048xi32, #blocked1>
+      %14 = arith.addi %offs_7, %10 : tensor<2048xi32, #blocked1>
+      %15 = arith.addi %bo, %14 : tensor<2048xi32, #blocked1>
+      amdg.buffer_store %11, %expert_ptr[%15], %13 : !tt.ptr<i32> -> tensor<2048xi32, #blocked1>
+    }
+    %12 = arith.cmpi eq, %e, %c0_i32 : i32
+    scf.if %12 {
+      %total = "tt.reduce"(%padded_14) <{axis = 0 : i32, reduction_ordering = "unordered"}> ({
+      ^bb0(%total_24: i32, %total_25: i32):
+        %total_26 = arith.addi %total_24, %total_25 : i32
+        tt.reduce.return %total_26 : i32
+      }) : (tensor<64xi32, #blocked1>) -> i32
+      tt.store %num_post_ptr, %total : !tt.ptr<i32>
+      %13 = tt.splat %cap : i32 -> tensor<2048xi32, #blocked1>
+      %14 = tt.splat %n : i32 -> tensor<2048xi32, #blocked1>
+      scf.for %c = %total to %cap step %c2048_i32  : i32 {
+        %po = tt.splat %c : i32 -> tensor<2048xi32, #blocked1>
+        %po_24 = arith.addi %po, %offs_7 : tensor<2048xi32, #blocked1>
+        %17 = arith.cmpi slt, %po_24, %13 : tensor<2048xi32, #blocked1>
+        amdg.buffer_store %14, %sorted_ptr[%po_24], %17 : !tt.ptr<i32> -> tensor<2048xi32, #blocked1>
+      }
+      %15 = arith.divsi %total, %c16_i32 : i32
+      %16 = tt.splat %num_blocks : i32 -> tensor<2048xi32, #blocked1>
+      scf.for %b = %15 to %num_blocks step %c2048_i32  : i32 {
+        %bo = tt.splat %b : i32 -> tensor<2048xi32, #blocked1>
+        %bo_24 = arith.addi %bo, %offs_7 : tensor<2048xi32, #blocked1>
+        %17 = arith.cmpi slt, %bo_24, %16 : tensor<2048xi32, #blocked1>
+        amdg.buffer_store %cst_0, %expert_ptr[%bo_24], %17 : !tt.ptr<i32> -> tensor<2048xi32, #blocked1>
+      }
+    }
+    tt.return
+  }
+}

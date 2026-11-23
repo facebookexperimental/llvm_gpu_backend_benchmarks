@@ -1,0 +1,37 @@
+module attributes {"ttg.cluster-dim-x" = 1 : i32, "ttg.cluster-dim-y" = 1 : i32, "ttg.cluster-dim-z" = 1 : i32} {
+  tt.func public @softmax_kernel(%output_ptr: !tt.ptr<f16> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %input_ptr: !tt.ptr<f16> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %input_row_stride: i32 {tt.divisibility = 16 : i32}, %output_row_stride: i32 {tt.divisibility = 16 : i32}, %n_cols: i32 {tt.divisibility = 16 : i32}) attributes {noinline = false} {
+    %row = arith.constant dense<0xFC00> : tensor<16384xf16>
+    %row_idx = tt.get_program_id x : i32
+    %row_start_ptr = arith.muli %row_idx, %input_row_stride : i32
+    %row_start_ptr_0 = tt.addptr %input_ptr, %row_start_ptr : !tt.ptr<f16>, i32
+    %col_offsets = tt.make_range {end = 16384 : i32, start = 0 : i32} : tensor<16384xi32>
+    %input_ptrs = tt.splat %row_start_ptr_0 : !tt.ptr<f16> -> tensor<16384x!tt.ptr<f16>>
+    %input_ptrs_1 = tt.addptr %input_ptrs, %col_offsets : tensor<16384x!tt.ptr<f16>>, tensor<16384xi32>
+    %row_2 = tt.splat %n_cols : i32 -> tensor<16384xi32>
+    %row_3 = arith.cmpi slt, %col_offsets, %row_2 : tensor<16384xi32>
+    %row_4 = tt.load %input_ptrs_1, %row_3, %row : tensor<16384x!tt.ptr<f16>>
+    %input = arith.extf %row_4 : tensor<16384xf16> to tensor<16384xf32>
+    %value = "tt.reduce"(%input) <{axis = 0 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%row_minus_max_9: f32, %row_minus_max_10: f32):
+      %value_11 = arith.maxnumf %row_minus_max_9, %row_minus_max_10 : f32
+      tt.reduce.return %value_11 : f32
+    }) : (tensor<16384xf32>) -> f32
+    %row_minus_max = tt.splat %value : f32 -> tensor<16384xf32>
+    %row_minus_max_5 = arith.subf %input, %row_minus_max : tensor<16384xf32>
+    %numerator = math.exp %row_minus_max_5 : tensor<16384xf32>
+    %denominator = "tt.reduce"(%numerator) <{axis = 0 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%denominator_9: f32, %denominator_10: f32):
+      %denominator_11 = arith.addf %denominator_9, %denominator_10 : f32
+      tt.reduce.return %denominator_11 : f32
+    }) : (tensor<16384xf32>) -> f32
+    %softmax_output = tt.splat %denominator : f32 -> tensor<16384xf32>
+    %softmax_output_6 = arith.divf %numerator, %softmax_output : tensor<16384xf32>
+    %output_row_start_ptr = arith.muli %row_idx, %output_row_stride : i32
+    %output_row_start_ptr_7 = tt.addptr %output_ptr, %output_row_start_ptr : !tt.ptr<f16>, i32
+    %output_ptrs = tt.splat %output_row_start_ptr_7 : !tt.ptr<f16> -> tensor<16384x!tt.ptr<f16>>
+    %output_ptrs_8 = tt.addptr %output_ptrs, %col_offsets : tensor<16384x!tt.ptr<f16>>, tensor<16384xi32>
+    %0 = arith.truncf %softmax_output_6 : tensor<16384xf32> to tensor<16384xf16>
+    tt.store %output_ptrs_8, %0, %row_3 : tensor<16384x!tt.ptr<f16>>
+    tt.return
+  }
+}

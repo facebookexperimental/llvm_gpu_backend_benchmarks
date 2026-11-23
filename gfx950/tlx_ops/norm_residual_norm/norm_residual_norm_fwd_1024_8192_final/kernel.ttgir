@@ -1,0 +1,74 @@
+#blocked = #ttg.blocked<{sizePerThread = [8], threadsPerWarp = [64], warpsPerCTA = [8], order = [0]}>
+#blocked1 = #ttg.blocked<{sizePerThread = [4], threadsPerWarp = [64], warpsPerCTA = [8], order = [0]}>
+#blocked2 = #ttg.blocked<{sizePerThread = [1], threadsPerWarp = [64], warpsPerCTA = [8], order = [0]}>
+module attributes {"ttg.cluster-dim-x" = 1 : i32, "ttg.cluster-dim-y" = 1 : i32, "ttg.cluster-dim-z" = 1 : i32, "ttg.num-ctas" = 1 : i32, "ttg.num-warps" = 8 : i32, ttg.target = "hip:gfx950", "ttg.threads-per-warp" = 64 : i32} {
+  tt.func public @_plain_kernel(%BRANCH: !tt.ptr<bf16> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %STREAM: !tt.ptr<f32> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %OUTPUT: !tt.ptr<bf16> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %NEW_STREAM: !tt.ptr<f32> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %POST_WEIGHT: !tt.ptr<bf16> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %PRE_WEIGHT: !tt.ptr<bf16> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %ALPHA: !tt.ptr<f32> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %BETA: !tt.ptr<f32> {tt.divisibility = 16 : i32, tt.pointer_range = 32 : i32}, %post_eps: f32, %pre_eps: f32) attributes {noinline = false} {
+    %cst = arith.constant dense<0.000000e+00> : tensor<8192xbf16, #blocked>
+    %c8192_i32 = arith.constant 8192 : i32
+    %cst_0 = arith.constant dense<8192> : tensor<8192xi32, #blocked>
+    %cst_1 = arith.constant dense<8192> : tensor<8192xi32, #blocked1>
+    %cst_2 = arith.constant 8.192000e+03 : f32
+    %cst_3 = arith.constant dense<0.000000e+00> : tensor<8192xf32, #blocked>
+    %row = tt.get_program_id x : i32
+    %offs = tt.make_range {end = 8192 : i32, start = 0 : i32} : tensor<8192xi32, #blocked>
+    %offs_4 = tt.make_range {end = 8192 : i32, start = 0 : i32} : tensor<8192xi32, #blocked1>
+    %mask = arith.cmpi slt, %offs, %cst_0 : tensor<8192xi32, #blocked>
+    %mask_5 = arith.cmpi slt, %offs_4, %cst_1 : tensor<8192xi32, #blocked1>
+    %branch = arith.muli %row, %c8192_i32 : i32
+    %branch_6 = tt.splat %branch : i32 -> tensor<8192xi32, #blocked>
+    %branch_7 = arith.addi %offs, %branch_6 : tensor<8192xi32, #blocked>
+    %branch_8 = amdg.buffer_load %BRANCH[%branch_7], %mask, %cst {contiguity = 8 : i32} : !tt.ptr<bf16> -> tensor<8192xbf16, #blocked>
+    %stream = amdg.buffer_load %STREAM[%branch_7] {contiguity = 4 : i32} : !tt.ptr<f32> -> tensor<8192xf32, #blocked>
+    %alpha = amdg.buffer_load %ALPHA[%offs] {contiguity = 4 : i32} : !tt.ptr<f32> -> tensor<8192xf32, #blocked>
+    %beta = amdg.buffer_load %BETA[%offs] {contiguity = 4 : i32} : !tt.ptr<f32> -> tensor<8192xf32, #blocked>
+    %pre_weight = amdg.buffer_load %PRE_WEIGHT[%offs] {contiguity = 8 : i32} : !tt.ptr<bf16> -> tensor<8192xbf16, #blocked>
+    %pre_weight_9 = arith.extf %pre_weight : tensor<8192xbf16, #blocked> to tensor<8192xf32, #blocked>
+    %post_weight = amdg.buffer_load %POST_WEIGHT[%offs], %mask, %cst {contiguity = 8 : i32} : !tt.ptr<bf16> -> tensor<8192xbf16, #blocked>
+    %post_weight_10 = arith.extf %post_weight : tensor<8192xbf16, #blocked> to tensor<8192xf32, #blocked>
+    %post_input = arith.extf %branch_8 : tensor<8192xbf16, #blocked> to tensor<8192xf32, #blocked>
+    %post_input_11 = arith.mulf %post_input, %post_weight_10 : tensor<8192xf32, #blocked>
+    %post_input_12 = arith.truncf %post_input_11 : tensor<8192xf32, #blocked> to tensor<8192xbf16, #blocked>
+    %post_input_13 = arith.extf %post_input_12 : tensor<8192xbf16, #blocked> to tensor<8192xf32, #blocked>
+    %post_sum = arith.mulf %post_input_13, %post_input_13 : tensor<8192xf32, #blocked>
+    %post_sum_14 = arith.select %mask, %post_sum, %cst_3 : tensor<8192xi1, #blocked>, tensor<8192xf32, #blocked>
+    %post_sum_15 = tt.reshape %post_sum_14 allow_reorder : tensor<8192xf32, #blocked> -> tensor<8192xf32, #blocked2>
+    %post_sum_16 = "tt.reduce"(%post_sum_15) <{axis = 0 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%post_sum_34: f32, %post_sum_35: f32):
+      %post_sum_36 = arith.addf %post_sum_34, %post_sum_35 : f32
+      tt.reduce.return %post_sum_36 : f32
+    }) : (tensor<8192xf32, #blocked2>) -> f32
+    %normed_branch = arith.divf %post_sum_16, %cst_2 : f32
+    %normed_branch_17 = arith.addf %normed_branch, %post_eps : f32
+    %normed_branch_18 = math.rsqrt %normed_branch_17 : f32
+    %normed_branch_19 = tt.splat %normed_branch_18 : f32 -> tensor<8192xf32, #blocked>
+    %normed_branch_20 = arith.mulf %post_input_13, %normed_branch_19 : tensor<8192xf32, #blocked>
+    %normed_branch_21 = arith.truncf %normed_branch_20 : tensor<8192xf32, #blocked> to tensor<8192xbf16, #blocked>
+    %normed_branch_22 = arith.extf %normed_branch_21 : tensor<8192xbf16, #blocked> to tensor<8192xf32, #blocked>
+    %new_stream = arith.mulf %alpha, %stream : tensor<8192xf32, #blocked>
+    %new_stream_23 = arith.mulf %beta, %normed_branch_22 : tensor<8192xf32, #blocked>
+    %new_stream_24 = arith.addf %new_stream, %new_stream_23 : tensor<8192xf32, #blocked>
+    %0 = tt.splat %branch : i32 -> tensor<8192xi32, #blocked1>
+    %1 = arith.addi %offs_4, %0 : tensor<8192xi32, #blocked1>
+    %2 = ttg.convert_layout %new_stream_24 : tensor<8192xf32, #blocked> -> tensor<8192xf32, #blocked1>
+    amdg.buffer_store %2, %NEW_STREAM[%1], %mask_5 {contiguity = 4 : i32} : !tt.ptr<f32> -> tensor<8192xf32, #blocked1>
+    %pre_input = arith.truncf %new_stream_24 : tensor<8192xf32, #blocked> to tensor<8192xbf16, #blocked>
+    %pre_input_25 = arith.extf %pre_input : tensor<8192xbf16, #blocked> to tensor<8192xf32, #blocked>
+    %pre_sum = arith.mulf %pre_input_25, %pre_input_25 : tensor<8192xf32, #blocked>
+    %pre_sum_26 = arith.select %mask, %pre_sum, %cst_3 : tensor<8192xi1, #blocked>, tensor<8192xf32, #blocked>
+    %pre_sum_27 = tt.reshape %pre_sum_26 allow_reorder : tensor<8192xf32, #blocked> -> tensor<8192xf32, #blocked2>
+    %pre_sum_28 = "tt.reduce"(%pre_sum_27) <{axis = 0 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%pre_sum_34: f32, %pre_sum_35: f32):
+      %pre_sum_36 = arith.addf %pre_sum_34, %pre_sum_35 : f32
+      tt.reduce.return %pre_sum_36 : f32
+    }) : (tensor<8192xf32, #blocked2>) -> f32
+    %normed = arith.divf %pre_sum_28, %cst_2 : f32
+    %normed_29 = arith.addf %normed, %pre_eps : f32
+    %normed_30 = math.rsqrt %normed_29 : f32
+    %normed_31 = tt.splat %normed_30 : f32 -> tensor<8192xf32, #blocked>
+    %normed_32 = arith.mulf %pre_input_25, %normed_31 : tensor<8192xf32, #blocked>
+    %normed_33 = arith.mulf %normed_32, %pre_weight_9 : tensor<8192xf32, #blocked>
+    %3 = arith.truncf %normed_33 : tensor<8192xf32, #blocked> to tensor<8192xbf16, #blocked>
+    amdg.buffer_store %3, %OUTPUT[%branch_7], %mask {contiguity = 8 : i32} : !tt.ptr<bf16> -> tensor<8192xbf16, #blocked>
+    tt.return
+  }
+}
