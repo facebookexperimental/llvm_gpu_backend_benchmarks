@@ -1,0 +1,36 @@
+module {
+  tt.func public @_gemv_kernel(%X: !tt.ptr<bf16> {tt.divisibility = 16 : i32}, %W: !tt.ptr<f32> {tt.divisibility = 16 : i32}, %OUT: !tt.ptr<f32> {tt.divisibility = 16 : i32}, %stride_x: i32 {tt.divisibility = 16 : i32}) attributes {noinline = false} {
+    %w = arith.constant 8192 : i32
+    %acc = arith.constant dense<0.000000e+00> : tensor<1xf32>
+    %c256_i32 = arith.constant 256 : i32
+    %pid_n = tt.get_program_id x : i32
+    %row = tt.get_program_id y : i32
+    %0 = arith.muli %row, %c256_i32 : i32
+    %1 = tt.addptr %OUT, %0 : !tt.ptr<f32>, i32
+    %2 = tt.addptr %1, %pid_n : !tt.ptr<f32>, i32
+    %3 = tt.splat %2 : !tt.ptr<f32> -> tensor<1x!tt.ptr<f32>>
+    %offs_k = tt.make_range {end = 8192 : i32, start = 0 : i32} : tensor<8192xi32>
+    %w_0 = arith.muli %pid_n, %w : i32
+    %w_1 = tt.addptr %W, %w_0 : !tt.ptr<f32>, i32
+    %w_2 = tt.expand_dims %offs_k {axis = 0 : i32} : tensor<8192xi32> -> tensor<1x8192xi32>
+    %w_3 = tt.splat %w_1 : !tt.ptr<f32> -> tensor<1x8192x!tt.ptr<f32>>
+    %w_4 = tt.addptr %w_3, %w_2 : tensor<1x8192x!tt.ptr<f32>>, tensor<1x8192xi32>
+    %w_5 = tt.load %w_4 : tensor<1x8192x!tt.ptr<f32>>
+    %x = arith.muli %row, %stride_x : i32
+    %x_6 = tt.addptr %X, %x : !tt.ptr<bf16>, i32
+    %x_7 = tt.splat %x_6 : !tt.ptr<bf16> -> tensor<8192x!tt.ptr<bf16>>
+    %x_8 = tt.addptr %x_7, %offs_k : tensor<8192x!tt.ptr<bf16>>, tensor<8192xi32>
+    %x_9 = tt.load %x_8 : tensor<8192x!tt.ptr<bf16>>
+    %x_10 = arith.extf %x_9 : tensor<8192xbf16> to tensor<8192xf32>
+    %acc_11 = tt.expand_dims %x_10 {axis = 0 : i32} : tensor<8192xf32> -> tensor<1x8192xf32>
+    %acc_12 = arith.mulf %w_5, %acc_11 : tensor<1x8192xf32>
+    %acc_13 = "tt.reduce"(%acc_12) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%acc_15: f32, %acc_16: f32):
+      %acc_17 = arith.addf %acc_15, %acc_16 : f32
+      tt.reduce.return %acc_17 : f32
+    }) : (tensor<1x8192xf32>) -> tensor<1xf32>
+    %acc_14 = arith.addf %acc_13, %acc : tensor<1xf32>
+    tt.store %3, %acc_14 : tensor<1x!tt.ptr<f32>>
+    tt.return
+  }
+}

@@ -1,0 +1,42 @@
+#blocked = #ttg.blocked<{sizePerThread = [1, 4], threadsPerWarp = [1, 32], warpsPerCTA = [1, 8], order = [1, 0]}>
+#blocked1 = #ttg.blocked<{sizePerThread = [1], threadsPerWarp = [32], warpsPerCTA = [8], order = [0]}>
+#blocked2 = #ttg.blocked<{sizePerThread = [8], threadsPerWarp = [32], warpsPerCTA = [8], order = [0]}>
+module attributes {"ttg.cluster-dim-x" = 1 : i32, "ttg.cluster-dim-y" = 1 : i32, "ttg.cluster-dim-z" = 1 : i32, ttg.early_tma_store_lowering = true, ttg.min_reg_auto_ws = 24 : i32, "ttg.num-ctas" = 1 : i32, "ttg.num-warps" = 8 : i32, ttg.target = "cuda:100", "ttg.threads-per-warp" = 32 : i32, "ttng.two-ctas" = false} {
+  tt.func public @_gemv_kernel(%X: !tt.ptr<bf16> {tt.divisibility = 16 : i32}, %W: !tt.ptr<f32> {tt.divisibility = 16 : i32}, %OUT: !tt.ptr<f32> {tt.divisibility = 16 : i32}, %stride_x: i32 {tt.divisibility = 16 : i32}) attributes {noinline = false} {
+    %c256_i32 = arith.constant 256 : i32
+    %c8192_i32 = arith.constant 8192 : i32
+    %cst = arith.constant dense<0.000000e+00> : tensor<1xf32, #ttg.slice<{dim = 1, parent = #blocked}>>
+    %pid_n = tt.get_program_id x : i32
+    %row = tt.get_program_id y : i32
+    %0 = arith.muli %row, %c256_i32 : i32
+    %1 = tt.addptr %OUT, %0 : !tt.ptr<f32>, i32
+    %2 = tt.addptr %1, %pid_n : !tt.ptr<f32>, i32
+    %3 = tt.splat %2 : !tt.ptr<f32> -> tensor<1x!tt.ptr<f32>, #blocked1>
+    %offs_k = tt.make_range {end = 8192 : i32, start = 0 : i32} : tensor<8192xi32, #blocked2>
+    %w = arith.muli %pid_n, %c8192_i32 : i32
+    %w_0 = tt.addptr %W, %w : !tt.ptr<f32>, i32
+    %w_1 = tt.make_range {end = 8192 : i32, start = 0 : i32} : tensor<8192xi32, #ttg.slice<{dim = 0, parent = #blocked}>>
+    %w_2 = tt.expand_dims %w_1 {axis = 0 : i32} : tensor<8192xi32, #ttg.slice<{dim = 0, parent = #blocked}>> -> tensor<1x8192xi32, #blocked>
+    %w_3 = tt.splat %w_0 : !tt.ptr<f32> -> tensor<1x8192x!tt.ptr<f32>, #blocked>
+    %w_4 = tt.addptr %w_3, %w_2 : tensor<1x8192x!tt.ptr<f32>, #blocked>, tensor<1x8192xi32, #blocked>
+    %w_5 = tt.load %w_4 : tensor<1x8192x!tt.ptr<f32>, #blocked>
+    %x = arith.muli %row, %stride_x : i32
+    %x_6 = tt.addptr %X, %x : !tt.ptr<bf16>, i32
+    %x_7 = tt.splat %x_6 : !tt.ptr<bf16> -> tensor<8192x!tt.ptr<bf16>, #blocked2>
+    %x_8 = tt.addptr %x_7, %offs_k : tensor<8192x!tt.ptr<bf16>, #blocked2>, tensor<8192xi32, #blocked2>
+    %x_9 = tt.load %x_8 : tensor<8192x!tt.ptr<bf16>, #blocked2>
+    %x_10 = ttg.convert_layout %x_9 : tensor<8192xbf16, #blocked2> -> tensor<8192xbf16, #ttg.slice<{dim = 0, parent = #blocked}>>
+    %x_11 = arith.extf %x_10 : tensor<8192xbf16, #ttg.slice<{dim = 0, parent = #blocked}>> to tensor<8192xf32, #ttg.slice<{dim = 0, parent = #blocked}>>
+    %acc = tt.expand_dims %x_11 {axis = 0 : i32} : tensor<8192xf32, #ttg.slice<{dim = 0, parent = #blocked}>> -> tensor<1x8192xf32, #blocked>
+    %acc_12 = arith.mulf %w_5, %acc : tensor<1x8192xf32, #blocked>
+    %acc_13 = "tt.reduce"(%acc_12) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%acc_15: f32, %acc_16: f32):
+      %acc_17 = arith.addf %acc_15, %acc_16 : f32
+      tt.reduce.return %acc_17 : f32
+    }) : (tensor<1x8192xf32, #blocked>) -> tensor<1xf32, #ttg.slice<{dim = 1, parent = #blocked}>>
+    %acc_14 = arith.addf %acc_13, %cst : tensor<1xf32, #ttg.slice<{dim = 1, parent = #blocked}>>
+    %4 = ttg.convert_layout %acc_14 : tensor<1xf32, #ttg.slice<{dim = 1, parent = #blocked}>> -> tensor<1xf32, #blocked1>
+    tt.store %3, %4 : tensor<1x!tt.ptr<f32>, #blocked1>
+    tt.return
+  }
+}
