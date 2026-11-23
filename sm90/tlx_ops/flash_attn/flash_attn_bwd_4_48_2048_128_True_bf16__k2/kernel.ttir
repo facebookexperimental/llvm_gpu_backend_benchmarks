@@ -1,0 +1,354 @@
+#mma = #ttg.nvidia_mma<{versionMajor = 3, versionMinor = 0, warpsPerCTA = [4, 1], instrShape = [16, 64, 16]}>
+#mma1 = #ttg.nvidia_mma<{versionMajor = 3, versionMinor = 0, warpsPerCTA = [4, 1], instrShape = [16, 128, 16]}>
+#shared = #ttg.shared_linear<{offset = [[0, 1], [0, 2], [0, 4], [0, 8], [0, 16], [0, 32], [1, 8], [2, 16], [4, 32], [8, 0], [16, 0], [32, 0], [64, 0], [0, 64]]}, alignment = 1024>
+#shared1 = #ttg.shared_linear<{offset = [[0, 1], [0, 2], [0, 4], [0, 8], [0, 16], [0, 32], [1, 8], [2, 16], [4, 32], [8, 0], [16, 0], [32, 0], [0, 64]]}, alignment = 1024>
+#shared2 = #ttg.nvmma_shared<{swizzlingByteWidth = 128, transposed = false, elementBitWidth = 16}>
+#shared3 = #ttg.shared_linear<{offset = [[0, 1], [0, 2], [0, 4], [0, 8], [0, 16], [0, 32], [1, 8], [2, 16], [4, 32], [8, 0], [16, 0], [32, 0], [64, 0]]}, alignment = 1024>
+#shared4 = #ttg.swizzled_shared<{vec = 1, perPhase = 1, maxPhase = 1, order = [0]}>
+#shared5 = #ttg.nvmma_shared<{swizzlingByteWidth = 128, transposed = true, elementBitWidth = 16}>
+#smem = #ttg.shared_memory
+#shared6 = #tlx.user_layout<#shared>
+#shared7 = #tlx.user_layout<#shared1>
+#shared8 = #tlx.user_layout<#shared3>
+module attributes {tlx.has_explicit_local_mem_access = true, tlx.has_tlx_ops = true, tlx.has_warp_spec_ops = true, triton.skip_generic_pipeline, "ttg.cluster-dim-x" = 1 : i32, "ttg.cluster-dim-y" = 1 : i32, "ttg.cluster-dim-z" = 1 : i32, "ttg.num-ctas" = 1 : i32, "ttg.num-warps" = 4 : i32, ttg.target = "cuda:90", "ttg.threads-per-warp" = 32 : i32} {
+  tt.func public @_attn_bwd_tlx(%desc_q: !tt.tensordesc<64x128xbf16>, %desc_q.shape.0: i32, %desc_q.shape.1: i32, %desc_q.stride.0: i64, %desc_q.stride.1: i64, %desc_k: !tt.tensordesc<128x128xbf16>, %desc_k.shape.0: i32, %desc_k.shape.1: i32, %desc_k.stride.0: i64, %desc_k.stride.1: i64, %desc_v: !tt.tensordesc<128x128xbf16>, %desc_v.shape.0: i32, %desc_v.shape.1: i32, %desc_v.stride.0: i64, %desc_v.stride.1: i64, %sm_scale: f32, %desc_do: !tt.tensordesc<64x128xbf16>, %desc_do.shape.0: i32, %desc_do.shape.1: i32, %desc_do.stride.0: i64, %desc_do.stride.1: i64, %desc_dq: !tt.tensordesc<64x128xbf16>, %desc_dq.shape.0: i32, %desc_dq.shape.1: i32, %desc_dq.stride.0: i64, %desc_dq.stride.1: i64, %desc_dk: !tt.tensordesc<64x128xbf16>, %desc_dk.shape.0: i32, %desc_dk.shape.1: i32, %desc_dk.stride.0: i64, %desc_dk.stride.1: i64, %desc_dv: !tt.tensordesc<64x128xbf16>, %desc_dv.shape.0: i32, %desc_dv.shape.1: i32, %desc_dv.stride.0: i64, %desc_dv.stride.1: i64, %M: !tt.ptr<f32> {tt.divisibility = 16 : i32}, %D: !tt.ptr<f32> {tt.divisibility = 16 : i32}, %H: i32 {tt.divisibility = 16 : i32}, %N_CTX: i32 {tt.divisibility = 16 : i32}, %VALID_N_CTX: i32 {tt.divisibility = 16 : i32}) attributes {noinline = false} {
+    %c2_i32 = arith.constant 2 : i32
+    %true = arith.constant true
+    %c1_i32 = arith.constant 1 : i32
+    %c0_i32 = arith.constant 0 : i32
+    %c64_i32 = arith.constant 64 : i32
+    %start_n = arith.constant 128 : i32
+    %bhid = tt.get_program_id z : i32
+    %off_chz = arith.muli %bhid, %N_CTX : i32
+    %pid = tt.get_program_id x : i32
+    %M_0 = tt.addptr %M, %off_chz : !tt.ptr<f32>, i32
+    %D_1 = tt.addptr %D, %off_chz : !tt.ptr<f32>, i32
+    %start_n_2 = arith.muli %pid, %start_n : i32
+    %global_start_n = arith.addi %off_chz, %start_n_2 : i32
+    %first_q_block = arith.divsi %start_n_2, %c64_i32 : i32
+    %num_steps = arith.divsi %N_CTX, %c64_i32 : i32
+    %num_steps_3 = arith.subi %num_steps, %first_q_block : i32
+    %k_smem = ttg.local_alloc : () -> !ttg.memdesc<1x128x128xbf16, #shared6, #smem, mutable>
+    %v_smem = ttg.local_alloc : () -> !ttg.memdesc<1x128x128xbf16, #shared6, #smem, mutable>
+    %q_smem = ttg.local_alloc : () -> !ttg.memdesc<2x64x128xbf16, #shared7, #smem, mutable>
+    %do_smem = ttg.local_alloc : () -> !ttg.memdesc<2x64x128xbf16, #shared7, #smem, mutable>
+    %dq_store_smem = ttg.local_alloc : () -> !ttg.memdesc<4x64x128xbf16, #shared2, #smem, mutable>
+    %score_smem_full = ttg.local_alloc : () -> !ttg.memdesc<1x128x64xbf16, #shared8, #smem, mutable>
+    %kv_full = ttg.local_alloc : () -> !ttg.memdesc<1xi64, #shared4, #smem, mutable>
+    %kv_full_4 = ttg.memdesc_index %kv_full[%c0_i32] : !ttg.memdesc<1xi64, #shared4, #smem, mutable> -> !ttg.memdesc<1xi64, #shared4, #smem, mutable>
+    ttng.init_barrier %kv_full_4, 1 : !ttg.memdesc<1xi64, #shared4, #smem, mutable>
+    %q_fulls = ttg.local_alloc : () -> !ttg.memdesc<2xi64, #shared4, #smem, mutable>
+    %q_fulls_5 = ttg.memdesc_index %q_fulls[%c0_i32] : !ttg.memdesc<2xi64, #shared4, #smem, mutable> -> !ttg.memdesc<1xi64, #shared4, #smem, mutable>
+    ttng.init_barrier %q_fulls_5, 1 : !ttg.memdesc<1xi64, #shared4, #smem, mutable>
+    %q_fulls_6 = ttg.memdesc_index %q_fulls[%c1_i32] : !ttg.memdesc<2xi64, #shared4, #smem, mutable> -> !ttg.memdesc<1xi64, #shared4, #smem, mutable>
+    ttng.init_barrier %q_fulls_6, 1 : !ttg.memdesc<1xi64, #shared4, #smem, mutable>
+    %q_empties = ttg.local_alloc : () -> !ttg.memdesc<2xi64, #shared4, #smem, mutable>
+    %q_empties_7 = ttg.memdesc_index %q_empties[%c0_i32] : !ttg.memdesc<2xi64, #shared4, #smem, mutable> -> !ttg.memdesc<1xi64, #shared4, #smem, mutable>
+    ttng.init_barrier %q_empties_7, 2 : !ttg.memdesc<1xi64, #shared4, #smem, mutable>
+    %q_empties_8 = ttg.memdesc_index %q_empties[%c1_i32] : !ttg.memdesc<2xi64, #shared4, #smem, mutable> -> !ttg.memdesc<1xi64, #shared4, #smem, mutable>
+    ttng.init_barrier %q_empties_8, 2 : !ttg.memdesc<1xi64, #shared4, #smem, mutable>
+    %do_fulls = ttg.local_alloc : () -> !ttg.memdesc<2xi64, #shared4, #smem, mutable>
+    %do_fulls_9 = ttg.memdesc_index %do_fulls[%c0_i32] : !ttg.memdesc<2xi64, #shared4, #smem, mutable> -> !ttg.memdesc<1xi64, #shared4, #smem, mutable>
+    ttng.init_barrier %do_fulls_9, 1 : !ttg.memdesc<1xi64, #shared4, #smem, mutable>
+    %do_fulls_10 = ttg.memdesc_index %do_fulls[%c1_i32] : !ttg.memdesc<2xi64, #shared4, #smem, mutable> -> !ttg.memdesc<1xi64, #shared4, #smem, mutable>
+    ttng.init_barrier %do_fulls_10, 1 : !ttg.memdesc<1xi64, #shared4, #smem, mutable>
+    ttg.warp_specialize(%D_1, %M_0, %N_CTX, %desc_dk, %desc_dq, %desc_dv, %do_fulls, %do_smem, %dq_store_smem, %first_q_block, %global_start_n, %k_smem, %kv_full, %num_steps_3, %q_empties, %q_fulls, %q_smem, %off_chz, %score_smem_full, %sm_scale, %start_n_2, %v_smem) attributes {requestedRegisters = array<i32: 240, 240>}
+    default {
+      %k_load_view = ttg.memdesc_index %k_smem[%c0_i32] : !ttg.memdesc<1x128x128xbf16, #shared6, #smem, mutable> -> !ttg.memdesc<128x128xbf16, #shared6, #smem, mutable>
+      %k_load_view_11 = ttg.memdesc_reinterpret %k_load_view : !ttg.memdesc<128x128xbf16, #shared6, #smem, mutable> -> !ttg.memdesc<128x128xbf16, #shared2, #smem, mutable>
+      %v_load_view = ttg.memdesc_index %v_smem[%c0_i32] : !ttg.memdesc<1x128x128xbf16, #shared6, #smem, mutable> -> !ttg.memdesc<128x128xbf16, #shared6, #smem, mutable>
+      %v_load_view_12 = ttg.memdesc_reinterpret %v_load_view : !ttg.memdesc<128x128xbf16, #shared6, #smem, mutable> -> !ttg.memdesc<128x128xbf16, #shared2, #smem, mutable>
+      ttng.barrier_expect %kv_full_4, 65536, %true : !ttg.memdesc<1xi64, #shared4, #smem, mutable>
+      ttng.async_tma_copy_global_to_local %desc_k[%global_start_n, %c0_i32] %k_load_view_11, %kv_full_4, %true : !tt.tensordesc<128x128xbf16>, !ttg.memdesc<1xi64, #shared4, #smem, mutable> -> !ttg.memdesc<128x128xbf16, #shared2, #smem, mutable>
+      ttng.async_tma_copy_global_to_local %desc_v[%global_start_n, %c0_i32] %v_load_view_12, %kv_full_4, %true : !tt.tensordesc<128x128xbf16>, !ttg.memdesc<1xi64, #shared4, #smem, mutable> -> !ttg.memdesc<128x128xbf16, #shared2, #smem, mutable>
+      scf.for %q_iter = %c0_i32 to %num_steps_3 step %c1_i32  : i32 {
+        %q_buf = arith.remsi %q_iter, %c2_i32 : i32
+        %q_phase = arith.divsi %q_iter, %c2_i32 : i32
+        %q_phase_13 = arith.andi %q_phase, %c1_i32 : i32
+        %blk = arith.addi %first_q_block, %q_iter : i32
+        %start_m = arith.muli %blk, %c64_i32 : i32
+        %global_start_m = arith.addi %off_chz, %start_m : i32
+        %q_load_view = ttg.memdesc_index %q_smem[%q_buf] : !ttg.memdesc<2x64x128xbf16, #shared7, #smem, mutable> -> !ttg.memdesc<64x128xbf16, #shared7, #smem, mutable>
+        %q_load_view_14 = ttg.memdesc_reinterpret %q_load_view : !ttg.memdesc<64x128xbf16, #shared7, #smem, mutable> -> !ttg.memdesc<64x128xbf16, #shared2, #smem, mutable>
+        %do_load_view = ttg.memdesc_index %do_smem[%q_buf] : !ttg.memdesc<2x64x128xbf16, #shared7, #smem, mutable> -> !ttg.memdesc<64x128xbf16, #shared7, #smem, mutable>
+        %do_load_view_15 = ttg.memdesc_reinterpret %do_load_view : !ttg.memdesc<64x128xbf16, #shared7, #smem, mutable> -> !ttg.memdesc<64x128xbf16, #shared2, #smem, mutable>
+        %0 = ttg.memdesc_index %q_empties[%q_buf] : !ttg.memdesc<2xi64, #shared4, #smem, mutable> -> !ttg.memdesc<1xi64, #shared4, #smem, mutable>
+        %1 = arith.xori %q_phase_13, %c1_i32 : i32
+        ttng.wait_barrier %0, %1, %true : !ttg.memdesc<1xi64, #shared4, #smem, mutable>
+        %2 = ttg.memdesc_index %q_fulls[%q_buf] : !ttg.memdesc<2xi64, #shared4, #smem, mutable> -> !ttg.memdesc<1xi64, #shared4, #smem, mutable>
+        ttng.barrier_expect %2, 16384, %true : !ttg.memdesc<1xi64, #shared4, #smem, mutable>
+        ttng.async_tma_copy_global_to_local %desc_q[%global_start_m, %c0_i32] %q_load_view_14, %2, %true : !tt.tensordesc<64x128xbf16>, !ttg.memdesc<1xi64, #shared4, #smem, mutable> -> !ttg.memdesc<64x128xbf16, #shared2, #smem, mutable>
+        %3 = ttg.memdesc_index %do_fulls[%q_buf] : !ttg.memdesc<2xi64, #shared4, #smem, mutable> -> !ttg.memdesc<1xi64, #shared4, #smem, mutable>
+        ttng.barrier_expect %3, 16384, %true : !ttg.memdesc<1xi64, #shared4, #smem, mutable>
+        ttng.async_tma_copy_global_to_local %desc_do[%global_start_m, %c0_i32] %do_load_view_15, %3, %true : !tt.tensordesc<64x128xbf16>, !ttg.memdesc<1xi64, #shared4, #smem, mutable> -> !ttg.memdesc<64x128xbf16, #shared2, #smem, mutable>
+      }
+      ttg.warp_yield
+    }
+    partition0(%arg41: !tt.ptr<f32>, %arg42: !tt.ptr<f32>, %arg43: i32, %arg44: !tt.tensordesc<64x128xbf16>, %arg45: !tt.tensordesc<64x128xbf16>, %arg46: !tt.tensordesc<64x128xbf16>, %arg47: !ttg.memdesc<2xi64, #shared4, #smem, mutable>, %arg48: !ttg.memdesc<2x64x128xbf16, #shared7, #smem, mutable>, %arg49: !ttg.memdesc<4x64x128xbf16, #shared2, #smem, mutable>, %arg50: i32, %arg51: i32, %arg52: !ttg.memdesc<1x128x128xbf16, #shared6, #smem, mutable>, %arg53: !ttg.memdesc<1xi64, #shared4, #smem, mutable>, %arg54: i32, %arg55: !ttg.memdesc<2xi64, #shared4, #smem, mutable>, %arg56: !ttg.memdesc<2xi64, #shared4, #smem, mutable>, %arg57: !ttg.memdesc<2x64x128xbf16, #shared7, #smem, mutable>, %arg58: i32, %arg59: !ttg.memdesc<1x128x64xbf16, #shared8, #smem, mutable>, %arg60: f32, %arg61: i32, %arg62: !ttg.memdesc<1x128x128xbf16, #shared6, #smem, mutable>) num_warps(4) {
+      %cst = arith.constant dense<0.000000e+00> : tensor<64x128xf32>
+      %cst_11 = arith.constant dense<0xFF800000> : tensor<64x64xf32>
+      %c128_i32 = arith.constant 128 : i32
+      %cst_12 = arith.constant 1.44269502 : f32
+      %cst_13 = arith.constant dense<0.000000e+00> : tensor<64x64xf32>
+      %c64_i32_14 = arith.constant 64 : i32
+      %c2_i32_15 = arith.constant 2 : i32
+      %c1_i32_16 = arith.constant 1 : i32
+      %true_17 = arith.constant true
+      %c0_i32_18 = arith.constant 0 : i32
+      %k_view = ttg.memdesc_index %arg52[%c0_i32_18] : !ttg.memdesc<1x128x128xbf16, #shared6, #smem, mutable> -> !ttg.memdesc<128x128xbf16, #shared6, #smem, mutable>
+      %k_view_19 = ttg.memdesc_reinterpret %k_view : !ttg.memdesc<128x128xbf16, #shared6, #smem, mutable> -> !ttg.memdesc<128x128xbf16, #shared2, #smem, mutable>
+      %v_view = ttg.memdesc_index %arg62[%c0_i32_18] : !ttg.memdesc<1x128x128xbf16, #shared6, #smem, mutable> -> !ttg.memdesc<128x128xbf16, #shared6, #smem, mutable>
+      %v_view_20 = ttg.memdesc_reinterpret %v_view : !ttg.memdesc<128x128xbf16, #shared6, #smem, mutable> -> !ttg.memdesc<128x128xbf16, #shared2, #smem, mutable>
+      %score_view = ttg.memdesc_index %arg59[%c0_i32_18] : !ttg.memdesc<1x128x64xbf16, #shared8, #smem, mutable> -> !ttg.memdesc<128x64xbf16, #shared8, #smem, mutable>
+      %score_view_21 = ttg.memdesc_reinterpret %score_view : !ttg.memdesc<128x64xbf16, #shared8, #smem, mutable> -> !ttg.memdesc<128x64xbf16, #shared2, #smem, mutable>
+      %score_view_t = ttg.memdesc_trans %score_view_21 {order = array<i32: 1, 0>} : !ttg.memdesc<128x64xbf16, #shared2, #smem, mutable> -> !ttg.memdesc<64x128xbf16, #shared5, #smem, mutable>
+      %k_slice = ttg.memdesc_subslice %k_view_19[0, 0] : !ttg.memdesc<128x128xbf16, #shared2, #smem, mutable> -> !ttg.memdesc<64x128xbf16, #shared2, #smem, mutable, 128x128>
+      %v_slice = ttg.memdesc_subslice %v_view_20[0, 0] : !ttg.memdesc<128x128xbf16, #shared2, #smem, mutable> -> !ttg.memdesc<64x128xbf16, #shared2, #smem, mutable, 128x128>
+      %score_smem = ttg.memdesc_subslice %score_view_21[0, 0] : !ttg.memdesc<128x64xbf16, #shared2, #smem, mutable> -> !ttg.memdesc<64x64xbf16, #shared2, #smem, mutable, 128x64>
+      %score_smem_t = ttg.memdesc_subslice %score_view_t[0, 0] : !ttg.memdesc<64x128xbf16, #shared5, #smem, mutable> -> !ttg.memdesc<64x64xbf16, #shared5, #smem, mutable, 64x128>
+      %0 = ttg.memdesc_index %arg53[%c0_i32_18] : !ttg.memdesc<1xi64, #shared4, #smem, mutable> -> !ttg.memdesc<1xi64, #shared4, #smem, mutable>
+      ttng.wait_barrier %0, %c0_i32_18, %true_17 : !ttg.memdesc<1xi64, #shared4, #smem, mutable>
+      %offs_m = tt.make_range {end = 64 : i32, start = 0 : i32} : tensor<64xi32>
+      %qkT = tlx.require_layout %cst_13 : tensor<64x64xf32> -> tensor<64x64xf32, #mma>
+      %valid_m = tt.splat %arg43 : i32 -> tensor<64xi32>
+      %m = tt.splat %arg42 : !tt.ptr<f32> -> tensor<64x!tt.ptr<f32>>
+      %Di = tt.splat %arg41 : !tt.ptr<f32> -> tensor<64x!tt.ptr<f32>>
+      %qkT_22 = arith.mulf %arg60, %cst_12 : f32
+      %qkT_23 = tt.splat %qkT_22 : f32 -> tensor<64x64xf32>
+      %offs_n = tt.splat %arg61 : i32 -> tensor<64xi32>
+      %offs_n_24 = arith.addi %offs_n, %offs_m : tensor<64xi32>
+      %1 = arith.addi %arg61, %c128_i32 : i32
+      %dq = tlx.require_layout %cst : tensor<64x128xf32> -> tensor<64x128xf32, #mma1>
+      %dq_25 = tt.splat %arg60 : f32 -> tensor<64x128xf32>
+      %dv:2 = scf.for %q_iter = %c0_i32_18 to %arg54 step %c1_i32_16 iter_args(%dk_27 = %cst, %dv_28 = %cst) -> (tensor<64x128xf32>, tensor<64x128xf32>)  : i32 {
+        %q_buf = arith.remsi %q_iter, %c2_i32_15 : i32
+        %q_phase = arith.divsi %q_iter, %c2_i32_15 : i32
+        %q_phase_29 = arith.andi %q_phase, %c1_i32_16 : i32
+        %blk = arith.addi %arg50, %q_iter : i32
+        %start_m = arith.muli %blk, %c64_i32_14 : i32
+        %offs_m_30 = tt.splat %start_m : i32 -> tensor<64xi32>
+        %offs_m_31 = arith.addi %offs_m_30, %offs_m : tensor<64xi32>
+        %5 = ttg.memdesc_index %arg56[%q_buf] : !ttg.memdesc<2xi64, #shared4, #smem, mutable> -> !ttg.memdesc<1xi64, #shared4, #smem, mutable>
+        ttng.wait_barrier %5, %q_phase_29, %true_17 : !ttg.memdesc<1xi64, #shared4, #smem, mutable>
+        %q = ttg.memdesc_index %arg57[%q_buf] : !ttg.memdesc<2x64x128xbf16, #shared7, #smem, mutable> -> !ttg.memdesc<64x128xbf16, #shared7, #smem, mutable>
+        %q_32 = ttg.memdesc_reinterpret %q : !ttg.memdesc<64x128xbf16, #shared7, #smem, mutable> -> !ttg.memdesc<64x128xbf16, #shared2, #smem, mutable>
+        %qT = ttg.memdesc_trans %q_32 {order = array<i32: 1, 0>} : !ttg.memdesc<64x128xbf16, #shared2, #smem, mutable> -> !ttg.memdesc<128x64xbf16, #shared5, #smem, mutable>
+        %qkT_33 = ttng.warp_group_dot %k_slice, %qT, %qkT {inputPrecision = 0 : i32, isAsync = true} : !ttg.memdesc<64x128xbf16, #shared2, #smem, mutable, 128x128> * !ttg.memdesc<128x64xbf16, #shared5, #smem, mutable> -> tensor<64x64xf32, #mma>
+        %valid_m_34 = arith.cmpi slt, %offs_m_31, %valid_m : tensor<64xi32>
+        %m_35 = tt.addptr %m, %offs_m_31 : tensor<64x!tt.ptr<f32>>, tensor<64xi32>
+        %m_36 = tt.load %m_35, %valid_m_34 : tensor<64x!tt.ptr<f32>>
+        %Di_37 = tt.addptr %Di, %offs_m_31 : tensor<64x!tt.ptr<f32>>, tensor<64xi32>
+        %Di_38 = tt.load %Di_37, %valid_m_34 : tensor<64x!tt.ptr<f32>>
+        %6 = ttg.memdesc_index %arg47[%q_buf] : !ttg.memdesc<2xi64, #shared4, #smem, mutable> -> !ttg.memdesc<1xi64, #shared4, #smem, mutable>
+        ttng.wait_barrier %6, %q_phase_29, %true_17 : !ttg.memdesc<1xi64, #shared4, #smem, mutable>
+        %do = ttg.memdesc_index %arg48[%q_buf] : !ttg.memdesc<2x64x128xbf16, #shared7, #smem, mutable> -> !ttg.memdesc<64x128xbf16, #shared7, #smem, mutable>
+        %do_39 = ttg.memdesc_reinterpret %do : !ttg.memdesc<64x128xbf16, #shared7, #smem, mutable> -> !ttg.memdesc<64x128xbf16, #shared2, #smem, mutable>
+        %doT = ttg.memdesc_trans %do_39 {order = array<i32: 1, 0>} : !ttg.memdesc<64x128xbf16, #shared2, #smem, mutable> -> !ttg.memdesc<128x64xbf16, #shared5, #smem, mutable>
+        %qkT_40 = ttng.warp_group_dot_wait %qkT_33 {pendings = 0 : i32} : tensor<64x64xf32, #mma>
+        %qkT_41 = tlx.release_layout %qkT_40 {relaxed = true} : tensor<64x64xf32, #mma> -> tensor<64x64xf32>
+        %qkT_42 = arith.mulf %qkT_41, %qkT_23 : tensor<64x64xf32>
+        %7 = arith.cmpi slt, %start_m, %1 : i32
+        %8 = scf.if %7 -> (tensor<64x64xf32>) {
+          %qkT_67 = tt.expand_dims %offs_m_31 {axis = 0 : i32} : tensor<64xi32> -> tensor<1x64xi32>
+          %qkT_68 = tt.expand_dims %offs_n_24 {axis = 1 : i32} : tensor<64xi32> -> tensor<64x1xi32>
+          %qkT_69 = tt.broadcast %qkT_67 : tensor<1x64xi32> -> tensor<64x64xi32>
+          %qkT_70 = tt.broadcast %qkT_68 : tensor<64x1xi32> -> tensor<64x64xi32>
+          %qkT_71 = arith.cmpi sge, %qkT_69, %qkT_70 : tensor<64x64xi32>
+          %qkT_72 = arith.select %qkT_71, %qkT_42, %cst_11 : tensor<64x64xi1>, tensor<64x64xf32>
+          scf.yield %qkT_72 : tensor<64x64xf32>
+        } else {
+          scf.yield %qkT_42 : tensor<64x64xf32>
+        }
+        %pT = tt.expand_dims %m_36 {axis = 0 : i32} : tensor<64xf32> -> tensor<1x64xf32>
+        %pT_43 = tt.broadcast %pT : tensor<1x64xf32> -> tensor<64x64xf32>
+        %pT_44 = arith.subf %8, %pT_43 : tensor<64x64xf32>
+        %pT_45 = math.exp2 %pT_44 : tensor<64x64xf32>
+        %dpT = ttng.warp_group_dot %v_slice, %doT, %qkT {inputPrecision = 0 : i32, isAsync = true} : !ttg.memdesc<64x128xbf16, #shared2, #smem, mutable, 128x128> * !ttg.memdesc<128x64xbf16, #shared5, #smem, mutable> -> tensor<64x64xf32, #mma>
+        %dv_46 = arith.truncf %pT_45 : tensor<64x64xf32> to tensor<64x64xbf16>
+        %dv_47 = tlx.require_layout %dv_28 : tensor<64x128xf32> -> tensor<64x128xf32, #mma1>
+        %dv_48 = tlx.require_layout %dv_46 : tensor<64x64xbf16> -> tensor<64x64xbf16, #ttg.dot_op<{opIdx = 0, parent = #mma1, kWidth = 2}>>
+        %dv_49 = ttng.warp_group_dot %dv_48, %do_39, %dv_47 {inputPrecision = 0 : i32, isAsync = true} : tensor<64x64xbf16, #ttg.dot_op<{opIdx = 0, parent = #mma1, kWidth = 2}>> * !ttg.memdesc<64x128xbf16, #shared2, #smem, mutable> -> tensor<64x128xf32, #mma1>
+        %dpT_50 = ttng.warp_group_dot_wait %dpT {pendings = 1 : i32} : tensor<64x64xf32, #mma>
+        %dpT_51 = tlx.release_layout %dpT_50 {relaxed = true} : tensor<64x64xf32, #mma> -> tensor<64x64xf32>
+        %dsT = tt.expand_dims %Di_38 {axis = 0 : i32} : tensor<64xf32> -> tensor<1x64xf32>
+        %dsT_52 = tt.broadcast %dsT : tensor<1x64xf32> -> tensor<64x64xf32>
+        %dsT_53 = arith.subf %dpT_51, %dsT_52 : tensor<64x64xf32>
+        %dsT_54 = arith.mulf %pT_45, %dsT_53 : tensor<64x64xf32>
+        %dk_55 = arith.truncf %dsT_54 : tensor<64x64xf32> to tensor<64x64xbf16>
+        %dk_56 = tlx.require_layout %dk_27 : tensor<64x128xf32> -> tensor<64x128xf32, #mma1>
+        %dk_57 = tlx.require_layout %dk_55 : tensor<64x64xbf16> -> tensor<64x64xbf16, #ttg.dot_op<{opIdx = 0, parent = #mma1, kWidth = 2}>>
+        %dk_58 = ttng.warp_group_dot %dk_57, %q_32, %dk_56 {inputPrecision = 0 : i32, isAsync = true} : tensor<64x64xbf16, #ttg.dot_op<{opIdx = 0, parent = #mma1, kWidth = 2}>> * !ttg.memdesc<64x128xbf16, #shared2, #smem, mutable> -> tensor<64x128xf32, #mma1>
+        %dv_59 = ttng.warp_group_dot_wait %dv_49 {pendings = 1 : i32} : tensor<64x128xf32, #mma1>
+        %dv_60 = tlx.release_layout %dv_59 {relaxed = true} : tensor<64x128xf32, #mma1> -> tensor<64x128xf32>
+        ttg.local_store %dk_55, %score_smem : tensor<64x64xbf16> -> !ttg.memdesc<64x64xbf16, #shared2, #smem, mutable, 128x64>
+        ttng.fence_async_shared {bCluster = false}
+        %dq_61 = ttng.warp_group_dot %score_smem_t, %k_slice, %dq {inputPrecision = 0 : i32, isAsync = true} : !ttg.memdesc<64x64xbf16, #shared5, #smem, mutable, 64x128> * !ttg.memdesc<64x128xbf16, #shared2, #smem, mutable, 128x128> -> tensor<64x128xf32, #mma1>
+        %dk_62 = ttng.warp_group_dot_wait %dk_58 {pendings = 1 : i32} : tensor<64x128xf32, #mma1>
+        %dk_63 = tlx.release_layout %dk_62 {relaxed = true} : tensor<64x128xf32, #mma1> -> tensor<64x128xf32>
+        %9 = ttg.memdesc_index %arg55[%q_buf] : !ttg.memdesc<2xi64, #shared4, #smem, mutable> -> !ttg.memdesc<1xi64, #shared4, #smem, mutable>
+        ttng.arrive_barrier %9, 1 : !ttg.memdesc<1xi64, #shared4, #smem, mutable>
+        %dq_64 = ttng.warp_group_dot_wait %dq_61 {pendings = 0 : i32} : tensor<64x128xf32, #mma1>
+        %dq_65 = tlx.release_layout %dq_64 {relaxed = true} : tensor<64x128xf32, #mma1> -> tensor<64x128xf32>
+        %dq_66 = arith.mulf %dq_65, %dq_25 : tensor<64x128xf32>
+        ttng.async_tma_store_wait {pendings = 1 : i32}
+        %10 = ttg.memdesc_index %arg49[%q_buf] : !ttg.memdesc<4x64x128xbf16, #shared2, #smem, mutable> -> !ttg.memdesc<64x128xbf16, #shared2, #smem, mutable>
+        %11 = arith.truncf %dq_66 : tensor<64x128xf32> to tensor<64x128xbf16>
+        ttg.local_store %11, %10 : tensor<64x128xbf16> -> !ttg.memdesc<64x128xbf16, #shared2, #smem, mutable>
+        ttng.fence_async_shared {bCluster = false}
+        %12 = arith.addi %arg58, %start_m : i32
+        ttng.async_tma_reduce add, %arg45[%12, %c0_i32_18] %10 : !tt.tensordesc<64x128xbf16>, !ttg.memdesc<64x128xbf16, #shared2, #smem, mutable>
+        scf.yield %dk_63, %dv_60 : tensor<64x128xf32>, tensor<64x128xf32>
+      }
+      %dk = tt.splat %arg60 : f32 -> tensor<64x128xf32>
+      %dk_26 = arith.mulf %dv#0, %dk : tensor<64x128xf32>
+      ttng.async_tma_store_wait {pendings = 0 : i32}
+      %2 = ttg.memdesc_index %arg49[%c0_i32_18] : !ttg.memdesc<4x64x128xbf16, #shared2, #smem, mutable> -> !ttg.memdesc<64x128xbf16, #shared2, #smem, mutable>
+      %3 = arith.truncf %dk_26 : tensor<64x128xf32> to tensor<64x128xbf16>
+      ttg.local_store %3, %2 : tensor<64x128xbf16> -> !ttg.memdesc<64x128xbf16, #shared2, #smem, mutable>
+      ttng.fence_async_shared {bCluster = false}
+      ttng.async_tma_copy_local_to_global %arg44[%arg51, %c0_i32_18] %2 : !tt.tensordesc<64x128xbf16>, !ttg.memdesc<64x128xbf16, #shared2, #smem, mutable>
+      ttng.async_tma_store_wait {pendings = 0 : i32}
+      %4 = arith.truncf %dv#1 : tensor<64x128xf32> to tensor<64x128xbf16>
+      ttg.local_store %4, %2 : tensor<64x128xbf16> -> !ttg.memdesc<64x128xbf16, #shared2, #smem, mutable>
+      ttng.fence_async_shared {bCluster = false}
+      ttng.async_tma_copy_local_to_global %arg46[%arg51, %c0_i32_18] %2 : !tt.tensordesc<64x128xbf16>, !ttg.memdesc<64x128xbf16, #shared2, #smem, mutable>
+      ttng.async_tma_store_wait {pendings = 0 : i32}
+      ttg.warp_return
+    }
+    partition1(%arg41: !tt.ptr<f32>, %arg42: !tt.ptr<f32>, %arg43: i32, %arg44: !tt.tensordesc<64x128xbf16>, %arg45: !tt.tensordesc<64x128xbf16>, %arg46: !tt.tensordesc<64x128xbf16>, %arg47: !ttg.memdesc<2xi64, #shared4, #smem, mutable>, %arg48: !ttg.memdesc<2x64x128xbf16, #shared7, #smem, mutable>, %arg49: !ttg.memdesc<4x64x128xbf16, #shared2, #smem, mutable>, %arg50: i32, %arg51: i32, %arg52: !ttg.memdesc<1x128x128xbf16, #shared6, #smem, mutable>, %arg53: !ttg.memdesc<1xi64, #shared4, #smem, mutable>, %arg54: i32, %arg55: !ttg.memdesc<2xi64, #shared4, #smem, mutable>, %arg56: !ttg.memdesc<2xi64, #shared4, #smem, mutable>, %arg57: !ttg.memdesc<2x64x128xbf16, #shared7, #smem, mutable>, %arg58: i32, %arg59: !ttg.memdesc<1x128x64xbf16, #shared8, #smem, mutable>, %arg60: f32, %arg61: i32, %arg62: !ttg.memdesc<1x128x128xbf16, #shared6, #smem, mutable>) num_warps(4) {
+      %cst = arith.constant dense<0.000000e+00> : tensor<64x128xf32>
+      %cst_11 = arith.constant dense<0xFF800000> : tensor<64x64xf32>
+      %c128_i32 = arith.constant 128 : i32
+      %cst_12 = arith.constant 1.44269502 : f32
+      %cst_13 = arith.constant dense<0.000000e+00> : tensor<64x64xf32>
+      %c64_i32_14 = arith.constant 64 : i32
+      %c2_i32_15 = arith.constant 2 : i32
+      %c1_i32_16 = arith.constant 1 : i32
+      %true_17 = arith.constant true
+      %c0_i32_18 = arith.constant 0 : i32
+      %k_view = ttg.memdesc_index %arg52[%c0_i32_18] : !ttg.memdesc<1x128x128xbf16, #shared6, #smem, mutable> -> !ttg.memdesc<128x128xbf16, #shared6, #smem, mutable>
+      %k_view_19 = ttg.memdesc_reinterpret %k_view : !ttg.memdesc<128x128xbf16, #shared6, #smem, mutable> -> !ttg.memdesc<128x128xbf16, #shared2, #smem, mutable>
+      %v_view = ttg.memdesc_index %arg62[%c0_i32_18] : !ttg.memdesc<1x128x128xbf16, #shared6, #smem, mutable> -> !ttg.memdesc<128x128xbf16, #shared6, #smem, mutable>
+      %v_view_20 = ttg.memdesc_reinterpret %v_view : !ttg.memdesc<128x128xbf16, #shared6, #smem, mutable> -> !ttg.memdesc<128x128xbf16, #shared2, #smem, mutable>
+      %score_view = ttg.memdesc_index %arg59[%c0_i32_18] : !ttg.memdesc<1x128x64xbf16, #shared8, #smem, mutable> -> !ttg.memdesc<128x64xbf16, #shared8, #smem, mutable>
+      %score_view_21 = ttg.memdesc_reinterpret %score_view : !ttg.memdesc<128x64xbf16, #shared8, #smem, mutable> -> !ttg.memdesc<128x64xbf16, #shared2, #smem, mutable>
+      %score_view_t = ttg.memdesc_trans %score_view_21 {order = array<i32: 1, 0>} : !ttg.memdesc<128x64xbf16, #shared2, #smem, mutable> -> !ttg.memdesc<64x128xbf16, #shared5, #smem, mutable>
+      %k_slice = ttg.memdesc_subslice %k_view_19[64, 0] : !ttg.memdesc<128x128xbf16, #shared2, #smem, mutable> -> !ttg.memdesc<64x128xbf16, #shared2, #smem, mutable, 128x128>
+      %v_slice = ttg.memdesc_subslice %v_view_20[64, 0] : !ttg.memdesc<128x128xbf16, #shared2, #smem, mutable> -> !ttg.memdesc<64x128xbf16, #shared2, #smem, mutable, 128x128>
+      %score_smem = ttg.memdesc_subslice %score_view_21[64, 0] : !ttg.memdesc<128x64xbf16, #shared2, #smem, mutable> -> !ttg.memdesc<64x64xbf16, #shared2, #smem, mutable, 128x64>
+      %score_smem_t = ttg.memdesc_subslice %score_view_t[0, 64] : !ttg.memdesc<64x128xbf16, #shared5, #smem, mutable> -> !ttg.memdesc<64x64xbf16, #shared5, #smem, mutable, 64x128>
+      %0 = ttg.memdesc_index %arg53[%c0_i32_18] : !ttg.memdesc<1xi64, #shared4, #smem, mutable> -> !ttg.memdesc<1xi64, #shared4, #smem, mutable>
+      ttng.wait_barrier %0, %c0_i32_18, %true_17 : !ttg.memdesc<1xi64, #shared4, #smem, mutable>
+      %offs_m = tt.make_range {end = 64 : i32, start = 0 : i32} : tensor<64xi32>
+      %qkT = tlx.require_layout %cst_13 : tensor<64x64xf32> -> tensor<64x64xf32, #mma>
+      %valid_m = tt.splat %arg43 : i32 -> tensor<64xi32>
+      %m = tt.splat %arg42 : !tt.ptr<f32> -> tensor<64x!tt.ptr<f32>>
+      %Di = tt.splat %arg41 : !tt.ptr<f32> -> tensor<64x!tt.ptr<f32>>
+      %qkT_22 = arith.mulf %arg60, %cst_12 : f32
+      %qkT_23 = tt.splat %qkT_22 : f32 -> tensor<64x64xf32>
+      %offs_n = arith.addi %arg61, %c64_i32_14 : i32
+      %offs_n_24 = tt.splat %offs_n : i32 -> tensor<64xi32>
+      %offs_n_25 = arith.addi %offs_n_24, %offs_m : tensor<64xi32>
+      %1 = arith.addi %arg61, %c128_i32 : i32
+      %dq = tlx.require_layout %cst : tensor<64x128xf32> -> tensor<64x128xf32, #mma1>
+      %dq_26 = tt.splat %arg60 : f32 -> tensor<64x128xf32>
+      %dv:2 = scf.for %q_iter = %c0_i32_18 to %arg54 step %c1_i32_16 iter_args(%dk_28 = %cst, %dv_29 = %cst) -> (tensor<64x128xf32>, tensor<64x128xf32>)  : i32 {
+        %q_buf = arith.remsi %q_iter, %c2_i32_15 : i32
+        %q_phase = arith.divsi %q_iter, %c2_i32_15 : i32
+        %q_phase_30 = arith.andi %q_phase, %c1_i32_16 : i32
+        %blk = arith.addi %arg50, %q_iter : i32
+        %start_m = arith.muli %blk, %c64_i32_14 : i32
+        %offs_m_31 = tt.splat %start_m : i32 -> tensor<64xi32>
+        %offs_m_32 = arith.addi %offs_m_31, %offs_m : tensor<64xi32>
+        %6 = ttg.memdesc_index %arg56[%q_buf] : !ttg.memdesc<2xi64, #shared4, #smem, mutable> -> !ttg.memdesc<1xi64, #shared4, #smem, mutable>
+        ttng.wait_barrier %6, %q_phase_30, %true_17 : !ttg.memdesc<1xi64, #shared4, #smem, mutable>
+        %q = ttg.memdesc_index %arg57[%q_buf] : !ttg.memdesc<2x64x128xbf16, #shared7, #smem, mutable> -> !ttg.memdesc<64x128xbf16, #shared7, #smem, mutable>
+        %q_33 = ttg.memdesc_reinterpret %q : !ttg.memdesc<64x128xbf16, #shared7, #smem, mutable> -> !ttg.memdesc<64x128xbf16, #shared2, #smem, mutable>
+        %qT = ttg.memdesc_trans %q_33 {order = array<i32: 1, 0>} : !ttg.memdesc<64x128xbf16, #shared2, #smem, mutable> -> !ttg.memdesc<128x64xbf16, #shared5, #smem, mutable>
+        %qkT_34 = ttng.warp_group_dot %k_slice, %qT, %qkT {inputPrecision = 0 : i32, isAsync = true} : !ttg.memdesc<64x128xbf16, #shared2, #smem, mutable, 128x128> * !ttg.memdesc<128x64xbf16, #shared5, #smem, mutable> -> tensor<64x64xf32, #mma>
+        %valid_m_35 = arith.cmpi slt, %offs_m_32, %valid_m : tensor<64xi32>
+        %m_36 = tt.addptr %m, %offs_m_32 : tensor<64x!tt.ptr<f32>>, tensor<64xi32>
+        %m_37 = tt.load %m_36, %valid_m_35 : tensor<64x!tt.ptr<f32>>
+        %Di_38 = tt.addptr %Di, %offs_m_32 : tensor<64x!tt.ptr<f32>>, tensor<64xi32>
+        %Di_39 = tt.load %Di_38, %valid_m_35 : tensor<64x!tt.ptr<f32>>
+        %7 = ttg.memdesc_index %arg47[%q_buf] : !ttg.memdesc<2xi64, #shared4, #smem, mutable> -> !ttg.memdesc<1xi64, #shared4, #smem, mutable>
+        ttng.wait_barrier %7, %q_phase_30, %true_17 : !ttg.memdesc<1xi64, #shared4, #smem, mutable>
+        %do = ttg.memdesc_index %arg48[%q_buf] : !ttg.memdesc<2x64x128xbf16, #shared7, #smem, mutable> -> !ttg.memdesc<64x128xbf16, #shared7, #smem, mutable>
+        %do_40 = ttg.memdesc_reinterpret %do : !ttg.memdesc<64x128xbf16, #shared7, #smem, mutable> -> !ttg.memdesc<64x128xbf16, #shared2, #smem, mutable>
+        %doT = ttg.memdesc_trans %do_40 {order = array<i32: 1, 0>} : !ttg.memdesc<64x128xbf16, #shared2, #smem, mutable> -> !ttg.memdesc<128x64xbf16, #shared5, #smem, mutable>
+        %qkT_41 = ttng.warp_group_dot_wait %qkT_34 {pendings = 0 : i32} : tensor<64x64xf32, #mma>
+        %qkT_42 = tlx.release_layout %qkT_41 {relaxed = true} : tensor<64x64xf32, #mma> -> tensor<64x64xf32>
+        %qkT_43 = arith.mulf %qkT_42, %qkT_23 : tensor<64x64xf32>
+        %8 = arith.cmpi slt, %start_m, %1 : i32
+        %9 = scf.if %8 -> (tensor<64x64xf32>) {
+          %qkT_68 = tt.expand_dims %offs_m_32 {axis = 0 : i32} : tensor<64xi32> -> tensor<1x64xi32>
+          %qkT_69 = tt.expand_dims %offs_n_25 {axis = 1 : i32} : tensor<64xi32> -> tensor<64x1xi32>
+          %qkT_70 = tt.broadcast %qkT_68 : tensor<1x64xi32> -> tensor<64x64xi32>
+          %qkT_71 = tt.broadcast %qkT_69 : tensor<64x1xi32> -> tensor<64x64xi32>
+          %qkT_72 = arith.cmpi sge, %qkT_70, %qkT_71 : tensor<64x64xi32>
+          %qkT_73 = arith.select %qkT_72, %qkT_43, %cst_11 : tensor<64x64xi1>, tensor<64x64xf32>
+          scf.yield %qkT_73 : tensor<64x64xf32>
+        } else {
+          scf.yield %qkT_43 : tensor<64x64xf32>
+        }
+        %pT = tt.expand_dims %m_37 {axis = 0 : i32} : tensor<64xf32> -> tensor<1x64xf32>
+        %pT_44 = tt.broadcast %pT : tensor<1x64xf32> -> tensor<64x64xf32>
+        %pT_45 = arith.subf %9, %pT_44 : tensor<64x64xf32>
+        %pT_46 = math.exp2 %pT_45 : tensor<64x64xf32>
+        %dpT = ttng.warp_group_dot %v_slice, %doT, %qkT {inputPrecision = 0 : i32, isAsync = true} : !ttg.memdesc<64x128xbf16, #shared2, #smem, mutable, 128x128> * !ttg.memdesc<128x64xbf16, #shared5, #smem, mutable> -> tensor<64x64xf32, #mma>
+        %dv_47 = arith.truncf %pT_46 : tensor<64x64xf32> to tensor<64x64xbf16>
+        %dv_48 = tlx.require_layout %dv_29 : tensor<64x128xf32> -> tensor<64x128xf32, #mma1>
+        %dv_49 = tlx.require_layout %dv_47 : tensor<64x64xbf16> -> tensor<64x64xbf16, #ttg.dot_op<{opIdx = 0, parent = #mma1, kWidth = 2}>>
+        %dv_50 = ttng.warp_group_dot %dv_49, %do_40, %dv_48 {inputPrecision = 0 : i32, isAsync = true} : tensor<64x64xbf16, #ttg.dot_op<{opIdx = 0, parent = #mma1, kWidth = 2}>> * !ttg.memdesc<64x128xbf16, #shared2, #smem, mutable> -> tensor<64x128xf32, #mma1>
+        %dpT_51 = ttng.warp_group_dot_wait %dpT {pendings = 1 : i32} : tensor<64x64xf32, #mma>
+        %dpT_52 = tlx.release_layout %dpT_51 {relaxed = true} : tensor<64x64xf32, #mma> -> tensor<64x64xf32>
+        %dsT = tt.expand_dims %Di_39 {axis = 0 : i32} : tensor<64xf32> -> tensor<1x64xf32>
+        %dsT_53 = tt.broadcast %dsT : tensor<1x64xf32> -> tensor<64x64xf32>
+        %dsT_54 = arith.subf %dpT_52, %dsT_53 : tensor<64x64xf32>
+        %dsT_55 = arith.mulf %pT_46, %dsT_54 : tensor<64x64xf32>
+        %dk_56 = arith.truncf %dsT_55 : tensor<64x64xf32> to tensor<64x64xbf16>
+        %dk_57 = tlx.require_layout %dk_28 : tensor<64x128xf32> -> tensor<64x128xf32, #mma1>
+        %dk_58 = tlx.require_layout %dk_56 : tensor<64x64xbf16> -> tensor<64x64xbf16, #ttg.dot_op<{opIdx = 0, parent = #mma1, kWidth = 2}>>
+        %dk_59 = ttng.warp_group_dot %dk_58, %q_33, %dk_57 {inputPrecision = 0 : i32, isAsync = true} : tensor<64x64xbf16, #ttg.dot_op<{opIdx = 0, parent = #mma1, kWidth = 2}>> * !ttg.memdesc<64x128xbf16, #shared2, #smem, mutable> -> tensor<64x128xf32, #mma1>
+        %dv_60 = ttng.warp_group_dot_wait %dv_50 {pendings = 1 : i32} : tensor<64x128xf32, #mma1>
+        %dv_61 = tlx.release_layout %dv_60 {relaxed = true} : tensor<64x128xf32, #mma1> -> tensor<64x128xf32>
+        ttg.local_store %dk_56, %score_smem : tensor<64x64xbf16> -> !ttg.memdesc<64x64xbf16, #shared2, #smem, mutable, 128x64>
+        ttng.fence_async_shared {bCluster = false}
+        %dq_62 = ttng.warp_group_dot %score_smem_t, %k_slice, %dq {inputPrecision = 0 : i32, isAsync = true} : !ttg.memdesc<64x64xbf16, #shared5, #smem, mutable, 64x128> * !ttg.memdesc<64x128xbf16, #shared2, #smem, mutable, 128x128> -> tensor<64x128xf32, #mma1>
+        %dk_63 = ttng.warp_group_dot_wait %dk_59 {pendings = 1 : i32} : tensor<64x128xf32, #mma1>
+        %dk_64 = tlx.release_layout %dk_63 {relaxed = true} : tensor<64x128xf32, #mma1> -> tensor<64x128xf32>
+        %10 = ttg.memdesc_index %arg55[%q_buf] : !ttg.memdesc<2xi64, #shared4, #smem, mutable> -> !ttg.memdesc<1xi64, #shared4, #smem, mutable>
+        ttng.arrive_barrier %10, 1 : !ttg.memdesc<1xi64, #shared4, #smem, mutable>
+        %dq_65 = ttng.warp_group_dot_wait %dq_62 {pendings = 0 : i32} : tensor<64x128xf32, #mma1>
+        %dq_66 = tlx.release_layout %dq_65 {relaxed = true} : tensor<64x128xf32, #mma1> -> tensor<64x128xf32>
+        %dq_67 = arith.mulf %dq_66, %dq_26 : tensor<64x128xf32>
+        %dq_store_buf = arith.addi %q_buf, %c2_i32_15 : i32
+        ttng.async_tma_store_wait {pendings = 1 : i32}
+        %11 = ttg.memdesc_index %arg49[%dq_store_buf] : !ttg.memdesc<4x64x128xbf16, #shared2, #smem, mutable> -> !ttg.memdesc<64x128xbf16, #shared2, #smem, mutable>
+        %12 = arith.truncf %dq_67 : tensor<64x128xf32> to tensor<64x128xbf16>
+        ttg.local_store %12, %11 : tensor<64x128xbf16> -> !ttg.memdesc<64x128xbf16, #shared2, #smem, mutable>
+        ttng.fence_async_shared {bCluster = false}
+        %13 = arith.addi %arg58, %start_m : i32
+        ttng.async_tma_reduce add, %arg45[%13, %c0_i32_18] %11 : !tt.tensordesc<64x128xbf16>, !ttg.memdesc<64x128xbf16, #shared2, #smem, mutable>
+        scf.yield %dk_64, %dv_61 : tensor<64x128xf32>, tensor<64x128xf32>
+      }
+      %dk = tt.splat %arg60 : f32 -> tensor<64x128xf32>
+      %dk_27 = arith.mulf %dv#0, %dk : tensor<64x128xf32>
+      ttng.async_tma_store_wait {pendings = 0 : i32}
+      %2 = ttg.memdesc_index %arg49[%c2_i32_15] : !ttg.memdesc<4x64x128xbf16, #shared2, #smem, mutable> -> !ttg.memdesc<64x128xbf16, #shared2, #smem, mutable>
+      %3 = arith.truncf %dk_27 : tensor<64x128xf32> to tensor<64x128xbf16>
+      ttg.local_store %3, %2 : tensor<64x128xbf16> -> !ttg.memdesc<64x128xbf16, #shared2, #smem, mutable>
+      ttng.fence_async_shared {bCluster = false}
+      %4 = arith.addi %arg51, %c64_i32_14 : i32
+      ttng.async_tma_copy_local_to_global %arg44[%4, %c0_i32_18] %2 : !tt.tensordesc<64x128xbf16>, !ttg.memdesc<64x128xbf16, #shared2, #smem, mutable>
+      ttng.async_tma_store_wait {pendings = 0 : i32}
+      %5 = arith.truncf %dv#1 : tensor<64x128xf32> to tensor<64x128xbf16>
+      ttg.local_store %5, %2 : tensor<64x128xbf16> -> !ttg.memdesc<64x128xbf16, #shared2, #smem, mutable>
+      ttng.fence_async_shared {bCluster = false}
+      ttng.async_tma_copy_local_to_global %arg46[%4, %c0_i32_18] %2 : !tt.tensordesc<64x128xbf16>, !ttg.memdesc<64x128xbf16, #shared2, #smem, mutable>
+      ttng.async_tma_store_wait {pendings = 0 : i32}
+      ttg.warp_return
+    } : (!tt.ptr<f32>, !tt.ptr<f32>, i32, !tt.tensordesc<64x128xbf16>, !tt.tensordesc<64x128xbf16>, !tt.tensordesc<64x128xbf16>, !ttg.memdesc<2xi64, #shared4, #smem, mutable>, !ttg.memdesc<2x64x128xbf16, #shared7, #smem, mutable>, !ttg.memdesc<4x64x128xbf16, #shared2, #smem, mutable>, i32, i32, !ttg.memdesc<1x128x128xbf16, #shared6, #smem, mutable>, !ttg.memdesc<1xi64, #shared4, #smem, mutable>, i32, !ttg.memdesc<2xi64, #shared4, #smem, mutable>, !ttg.memdesc<2xi64, #shared4, #smem, mutable>, !ttg.memdesc<2x64x128xbf16, #shared7, #smem, mutable>, i32, !ttg.memdesc<1x128x64xbf16, #shared8, #smem, mutable>, f32, i32, !ttg.memdesc<1x128x128xbf16, #shared6, #smem, mutable>) -> ()
+    tt.return
+  }
+}
