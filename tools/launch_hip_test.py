@@ -20,6 +20,8 @@ try:
         write_case,
     )
     from triton.benchmarks.tools.launch_hip import (
+        alloc_tensors,
+        drop_specialized_args,
         launch_case,
         make_arg_ptrs,
         parse_kernel_signature,
@@ -39,6 +41,8 @@ except ImportError:
 
     # pyrefly: ignore [missing-import]
     from launch_hip import (
+        alloc_tensors,
+        drop_specialized_args,
         launch_case,
         make_arg_ptrs,
         parse_kernel_signature,
@@ -162,6 +166,83 @@ class ValidateTest(unittest.TestCase):
         self.assertEqual((user, n), (self._sig(), 2))
         self.assertEqual(strip_scratch(self._sig()), (self._sig(), 0))
         self.assertEqual(strip_scratch([("ptr", 64)]), ([("ptr", 64)], 0))
+
+
+class DropSpecializedTest(unittest.TestCase):
+    def _launch(self, args, scratch_keys=True):
+        block = {"num_warps": 4}
+        if scratch_keys:
+            block.update(global_scratch_size=0, profile_scratch_size=0)
+        return {"grid": [1, 1, 1], "block": block, "args": args}
+
+    def _t(self, name):
+        return {"name": name, "kind": "tensor"}
+
+    def _i(self, name, value):
+        return {"name": name, "kind": "int", "value": value}
+
+    def test_drops_ones_before_scratch(self) -> None:
+        sig = [("ptr", 64), ("int", 32), ("ptr", 64), ("ptr", 64)]
+        launch = self._launch([self._t("a"), self._i("n", 8), self._i("s", 1)])
+        fixed = drop_specialized_args(launch, sig)
+        assert fixed is not None
+        self.assertEqual([a["name"] for a in fixed["args"]], ["a", "n"])
+        self.assertEqual(validate_launch(fixed, sig), [])
+        self.assertEqual(len(launch["args"]), 3)
+
+    def test_surplus_equal_to_scratch_count(self) -> None:
+        # Two specialized ints make the record as long as the signature.
+        sig = [("ptr", 64), ("int", 32), ("ptr", 64), ("ptr", 64)]
+        args = [self._t("a"), self._i("n", 8), self._i("s", 1), self._i("t", 1)]
+        fixed = drop_specialized_args(self._launch(args), sig)
+        assert fixed is not None
+        self.assertEqual([a["name"] for a in fixed["args"]], ["a", "n"])
+        self.assertEqual(strip_scratch(sig, fixed), (sig[:2], 2))
+
+    def test_ambiguous_ones_kept(self) -> None:
+        # Two ints equal 1 but only one was specialized: which one is unknown.
+        sig = [("ptr", 64), ("int", 32), ("ptr", 64), ("ptr", 64)]
+        launch = self._launch([self._t("a"), self._i("n", 1), self._i("s", 1)])
+        self.assertIs(drop_specialized_args(launch, sig), launch)
+
+    def test_none_args_dropped(self) -> None:
+        sig = [("ptr", 64), ("int", 32)]
+        none = {"name": "bias", "kind": "other", "type": "NoneType"}
+        launch = self._launch([self._t("a"), none, self._i("n", 1)], False)
+        fixed = drop_specialized_args(launch, sig)
+        assert fixed is not None
+        self.assertEqual([a["name"] for a in fixed["args"]], ["a", "n"])
+
+    def test_exact_record_unchanged(self) -> None:
+        sig = [("int", 32), ("ptr", 64), ("ptr", 64)]
+        launch = self._launch([self._i("n", 1), self._t("a"), self._t("b")])
+        self.assertIs(drop_specialized_args(launch, sig), launch)
+        self.assertIsNone(drop_specialized_args(None, sig))
+
+
+class AllocTensorsTest(unittest.TestCase):
+    def _rec(self, dtype, role="in"):
+        return {
+            "name": "x",
+            "kind": "tensor",
+            "shape": [8],
+            "dtype": dtype,
+            "role": role,
+        }
+
+    def test_byte_inputs_random(self) -> None:
+        torch = _FakeTorch()
+        alloc_tensors(torch, [self._rec("uint8")], "cuda", 0)
+        self.assertEqual(torch.randint_calls, [(0, 256, (8,))])
+
+    def test_integer_output_zeros(self) -> None:
+        torch = _FakeTorch()
+        alloc_tensors(torch, [self._rec("int32", role="out")], "cuda", 0)
+        self.assertEqual(torch.zeros_shapes, [(8,)])
+
+    def test_integer_input_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            alloc_tensors(_FakeTorch(), [self._rec("int32")], "cuda", 0)
 
 
 class FakePtr:
@@ -349,6 +430,45 @@ class RecordTest(unittest.TestCase):
         scalar = [a for a in desc["args"] if a["name"] == "n"][0]
         self.assertEqual((scalar["kind"], scalar["value"]), ("int", 8))
 
+    def test_small_integer_inputs_record_values(self) -> None:
+        try:
+            from triton.benchmarks.tools.capture import (
+                _snapshot_int_values,
+                _tensor_sample_hash,
+            )
+        except ImportError:
+            # Plain python3: sibling file in the same directory.
+            # pyrefly: ignore [missing-import]
+            from capture import _snapshot_int_values, _tensor_sample_hash
+
+        idx = _FakeTensor([0, 3, 7], shape=(3,), dtype="int32")
+        out = _FakeTensor([0, 0, 0], shape=(3,), dtype="int32")
+        x = _FakeTensor([1.0] * 3, shape=(3,))
+        jit_fn = _FakeFn(["idx", "out", "x"], [False, False, False])
+        args, kwargs = [idx, out, x], {"grid": (1, 1, 1)}
+        session = types.SimpleNamespace(int_values={})
+        self.assertEqual(
+            _snapshot_int_values(session, jit_fn, args, kwargs, copy=False), {}
+        )
+        values = _snapshot_int_values(session, jit_fn, args, kwargs, copy=True)
+        self.assertEqual(values, {"idx": [0, 3, 7], "out": [0, 0, 0]})
+        idx._data = [9, 9, 9]
+        self.assertEqual(
+            _snapshot_int_values(session, jit_fn, args, kwargs, copy=True), values
+        )
+        pre = {"idx": _tensor_sample_hash(idx), "out": _tensor_sample_hash(out)}
+        out._data = [1, 1, 1]
+        kernel = types.SimpleNamespace(
+            metadata=types.SimpleNamespace(num_warps=4, num_ctas=1, shared=0)
+        )
+        desc = record_launch(
+            jit_fn, args, kwargs, kernel, pre_hashes=pre, int_values=values
+        )
+        recs = {a["name"]: a for a in desc["args"]}
+        self.assertEqual(recs["idx"]["values"], [0, 3, 7])
+        self.assertNotIn("values", recs["out"])
+        self.assertNotIn("values", recs["x"])
+
     def test_constexprs_excluded(self) -> None:
         jit_fn = _FakeFn(["a", "BLOCK"], [False, True])
         kernel = types.SimpleNamespace(metadata=types.SimpleNamespace(num_warps=1))
@@ -474,6 +594,8 @@ class _FakeTorch:
         self.cuda = _FakeCuda()
         self._ptr = 0x1000
         self.zeros_shapes: list = []
+        self.randint_calls: list = []
+        self.tensor_values: list = []
 
     def manual_seed(self, _seed: int) -> None:
         pass
@@ -487,6 +609,14 @@ class _FakeTorch:
         return self._alloc(shape, **kwargs)
 
     def randn(self, shape, **kwargs) -> _ReplayTensor:
+        return self._alloc(shape, **kwargs)
+
+    def tensor(self, values, **kwargs):
+        self.tensor_values.append(list(values))
+        return types.SimpleNamespace(reshape=lambda shape: self._alloc(shape))
+
+    def randint(self, low, high, shape, **kwargs) -> _ReplayTensor:
+        self.randint_calls.append((low, high, tuple(shape)))
         return self._alloc(shape, **kwargs)
 
     def isfinite(self, _t):
@@ -635,8 +765,34 @@ class LaunchCaseTest(unittest.TestCase):
         args = self._args()
         args[-1] = {"name": "scale", "kind": "other", "repr": "f32?"}
         res, _torch, hip, _built = self._replay(args)
+        self.assertEqual(
+            res["status"], "unsupported: arg scale is not a tensor or scalar"
+        )
+        self.assertEqual(hip.launches, 0)
+
+    def test_replay_drops_specialized_args(self) -> None:
+        args = self._args()
+        args.insert(2, {"name": "stride", "kind": "int", "value": 1})
+        args.append({"name": "opt", "kind": "other", "repr": "None"})
+        res, _torch, hip, _built = self._replay(args)
+        self.assertEqual(res["status"], "ok")
+        self.assertEqual(hip.launches, 10 + 30)
+
+    def test_replay_recorded_integer_input(self) -> None:
+        args = self._args()
+        args[0]["dtype"] = "int64"
+        args[0]["values"] = [0, 1, 2, 3]
+        res, torch, hip, _built = self._replay(args)
+        self.assertEqual(res["status"], "ok")
+        self.assertEqual(torch.tensor_values, [[0, 1, 2, 3]])
+        self.assertEqual(hip.launches, 10 + 30)
+
+    def test_replay_integer_input(self) -> None:
+        args = self._args()
+        args[0]["dtype"] = "int64"
+        res, _torch, hip, _built = self._replay(args)
         self.assertEqual(res["status"], "unsupported-arg")
-        self.assertEqual(res["arg"], "scale")
+        self.assertEqual(res["problems"], ["integer input a has no recorded values"])
         self.assertEqual(hip.launches, 0)
 
     def test_replay_scratch(self) -> None:

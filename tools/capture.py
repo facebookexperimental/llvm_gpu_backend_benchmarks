@@ -375,12 +375,16 @@ def _record_scalar_arg(value, rec: dict) -> None:
         rec["type"] = type(value).__qualname__
 
 
-def record_launch(jit_fn, args, kwargs, compiled, pre_hashes=None) -> dict:
+def record_launch(
+    jit_fn, args, kwargs, compiled, pre_hashes=None, int_values=None
+) -> dict:
     """Launch-desc record for HIP replay (never raises; Nones when undecidable).
 
     Tensors record shape/dtype/stride plus an in/out role from pre/post
     sample hashes (skipped during autotune benching so timing stays clean);
-    constexprs are excluded (baked into the binary); scalars record values.
+    non-output tensors listed in ``int_values`` (name -> flat pre-run values)
+    also record ``values``; constexprs are excluded (baked into the binary);
+    scalars record values.
     """
     desc: dict = {
         "grid": None,
@@ -406,11 +410,13 @@ def record_launch(jit_fn, args, kwargs, compiled, pre_hashes=None) -> dict:
         if isinstance(key, tuple) and len(key) == 1 and key[0] < len(names)
     }
     pre_hashes = pre_hashes or {}
+    int_values = int_values or {}
     for name, value, is_const in bound:
         if not is_const and name not in specialized:
-            desc["args"].append(
-                _record_one_arg(desc, name, value, pre_hashes.get(name))
-            )
+            rec = _record_one_arg(desc, name, value, pre_hashes.get(name))
+            if name in int_values and rec.get("role") != "out":
+                rec["values"] = int_values[name]
+            desc["args"].append(rec)
     return desc
 
 
@@ -431,6 +437,44 @@ def _record_one_arg(desc: dict, name, value, pre) -> dict:
         rec["kind"] = "other"
         rec["repr"] = "unrecordable"
     return rec
+
+
+# Replay needs the real contents of index-like inputs (offsets, ids, block
+# tables); larger integer tensors are left for the replay to reject.
+_MAX_RECORDED_INT_ELEMS = 1 << 16
+
+
+def _snapshot_int_values(session, jit_fn, args, kwargs, copy: bool) -> dict:
+    """Pre-run contents of small int32/int64 tensor args, keyed by arg name.
+
+    Each tensor is copied to the host at most once per session (``copy``
+    is False inside timed autotune benching); later launches reuse it.
+    Never raises.
+    """
+    out: dict = {}
+    try:
+        for name, value, is_const in bind_launch_args(jit_fn, args, kwargs):
+            if is_const or not _is_tensor(value):
+                continue
+            dtype = str(value.dtype).split(".")[-1]
+            if (
+                dtype not in ("int32", "int64")
+                or value.numel() > _MAX_RECORDED_INT_ELEMS
+            ):
+                continue
+            key = (id(jit_fn), name, value.data_ptr(), tuple(value.shape), dtype)
+            if key not in session.int_values and copy:
+                if getattr(value, "is_cuda", False):
+                    import torch
+
+                    if torch.cuda.is_current_stream_capturing():
+                        continue
+                session.int_values[key] = value.detach().reshape(-1).cpu().tolist()
+            if key in session.int_values:
+                out[name] = session.int_values[key]
+    except Exception:
+        pass
+    return out
 
 
 def _snapshot_pre_hashes(jit_fn, args, kwargs) -> dict:
@@ -502,6 +546,9 @@ def _run_wrapper(session, original_run):
         pre_hashes = (
             {} if session._bench_active else _snapshot_pre_hashes(jit_fn, args, kwargs)
         )
+        int_values = _snapshot_int_values(
+            session, jit_fn, args, kwargs, copy=not session._bench_active
+        )
         compiled = original_run(jit_fn, *args, **kwargs)
         # Cache-hit relaunches return the same object (manual benchmark
         # loops without CUDA graphs relaunch thousands of times); capture
@@ -518,7 +565,12 @@ def _run_wrapper(session, original_run):
         # roles outside the timed region).
         try:
             session.launches[id(compiled)] = record_launch(
-                jit_fn, args, kwargs, compiled, pre_hashes=pre_hashes
+                jit_fn,
+                args,
+                kwargs,
+                compiled,
+                pre_hashes=pre_hashes,
+                int_values=int_values,
             )
         except Exception:
             pass
@@ -640,6 +692,9 @@ class CaptureSession:
         self.launches: dict[int, dict] = {}
         # True inside Autotuner._bench: skip role hashing so timing stays clean.
         self._bench_active: bool = False
+        # (jit fn, arg name, data_ptr, shape, dtype) -> flat pre-run values of
+        # small integer tensor args.
+        self.int_values: dict[tuple, list] = {}
 
     def _patch(self, obj, name: str, wrapper):
         original = getattr(obj, name)

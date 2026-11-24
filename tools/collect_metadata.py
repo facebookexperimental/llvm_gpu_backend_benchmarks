@@ -31,6 +31,7 @@ def _siblings():
     try:
         from triton.benchmarks.tools.capture import iter_cases
         from triton.benchmarks.tools.launch_hip import (
+            drop_specialized_args,
             parse_kernel_signature,
             strip_scratch,
             validate_launch,
@@ -38,11 +39,18 @@ def _siblings():
     except ImportError:
         from capture import iter_cases  # pyrefly: ignore [missing-import]
         from launch_hip import (  # pyrefly: ignore [missing-import]
+            drop_specialized_args,
             parse_kernel_signature,
             strip_scratch,
             validate_launch,
         )
-    return iter_cases, parse_kernel_signature, strip_scratch, validate_launch
+    return (
+        iter_cases,
+        parse_kernel_signature,
+        strip_scratch,
+        validate_launch,
+        drop_specialized_args,
+    )
 
 
 _DTYPE_BYTES = {
@@ -252,7 +260,7 @@ def _launch_details(launch: dict, sig, strip_scratch, wavefront: int) -> dict:
 
 
 def kernel_record(
-    cdir: str, parse, strip_scratch, validate, wavefront: int = 64
+    cdir: str, parse, strip_scratch, validate, wavefront: int = 64, normalize=None
 ) -> dict:
     """One kernel's metadata: launch readiness plus summaries when valid."""
     rec: dict = {"dir": os.path.basename(cdir)}
@@ -273,6 +281,8 @@ def kernel_record(
         rec["status"] = "bad-llir"
         return rec
     rec["name"] = name
+    if normalize is not None:
+        launch = normalize(launch, sig)
     problems = validate(launch, sig)
     if problems:
         rec["status"] = problems[0]
@@ -331,11 +341,13 @@ def case_record(source: str, target: str, group: str, kernels: list) -> dict:
 
 def collect(out_root: str, arch: str) -> dict:
     """Collect per-case metadata for one arch. Returns the metadata doc."""
-    iter_cases, parse, strip_scratch, validate = _siblings()
+    iter_cases, parse, strip_scratch, validate, normalize = _siblings()
     wavefront = WAVEFRONTS.get(arch, 64)
     groups: dict[tuple[str, str, str], list] = {}
     for source, target, case, cdir in iter_cases(out_root, arch):
-        rec = kernel_record(cdir, parse, strip_scratch, validate, wavefront)
+        rec = kernel_record(
+            cdir, parse, strip_scratch, validate, wavefront, normalize=normalize
+        )
         groups.setdefault((source, target, group_key(case)), []).append(rec)
     cases = [
         case_record(source, target, group, sorted(kernels, key=lambda r: r["dir"]))

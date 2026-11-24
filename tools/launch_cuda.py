@@ -33,6 +33,7 @@ try:
         _scratch_ptrs,
         _timed_ms,
         alloc_tensors,
+        drop_specialized_args,
         make_arg_ptrs,
         parse_kernel_signature,
         SEED,
@@ -48,6 +49,7 @@ except ImportError:
         _scratch_ptrs,
         _timed_ms,
         alloc_tensors,
+        drop_specialized_args,
         make_arg_ptrs,
         parse_kernel_signature,
         SEED,
@@ -138,7 +140,7 @@ def launch_case(
     with open(os.path.join(cdir, "compile.json")) as f:
         compile_info = json.load(f)
     name, sig = parse_kernel_signature(llir)
-    launch = compile_info.get("launch")
+    launch = drop_specialized_args(compile_info.get("launch"), sig)
     problems = validate_launch(launch, sig)
     if problems:
         return {"status": problems[0], "problems": problems}
@@ -168,14 +170,18 @@ def launch_case(
             cuda.cuModuleGetFunction(ctypes.byref(func), module, name.encode()),
             "get function",
         )
-        tensors = alloc_tensors(torch, launch["args"], launch.get("device"), seed)
         values = []
         rec: dict = {}
         try:
+            tensors = alloc_tensors(torch, launch["args"], launch.get("device"), seed)
             for rec in launch["args"]:
                 values.append(_resolve_arg_value(rec, tensors))
-        except ValueError:
-            return {"status": "unsupported-arg", "arg": rec.get("name")}
+        except ValueError as e:
+            return {
+                "status": "unsupported-arg",
+                "arg": rec.get("name"),
+                "problems": [str(e)],
+            }
         values += _scratch_ptrs(torch, launch, n_scratch)
         buffers, arg_array = make_arg_ptrs(values, sig)
         gx, gy, gz = (int(v) for v in launch["grid"])

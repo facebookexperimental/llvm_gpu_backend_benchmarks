@@ -101,6 +101,55 @@ def _split_top_level(params: str) -> list[str]:
     return parts
 
 
+def _is_none_arg(rec: dict) -> bool:
+    return rec.get("kind") == "other" and (
+        rec.get("type") == "NoneType" or rec.get("repr") == "None"
+    )
+
+
+def drop_specialized_args(
+    launch: dict | None, sig: list[tuple[str, int]]
+) -> dict | None:
+    """Drop recorded args that Triton compiled in as constants.
+
+    Triton turns None args and int args equal to 1 (unless listed in
+    ``do_not_specialize``) into constants, so they are not kernel params.
+    Records that list them have more args than the signature. None args are
+    always dropped; int args equal to 1 are dropped only when their count is
+    exactly the remaining surplus and the remaining args match the
+    signature's pointer/scalar kinds. Returns a copy of the launch, or the
+    launch unchanged when nothing is dropped.
+    """
+    if not launch:
+        return launch
+    args = launch.get("args") or []
+    kept = [rec for rec in args if not _is_none_arg(rec)]
+    ones = [
+        i
+        for i, rec in enumerate(kept)
+        if rec.get("kind") == "int" and rec.get("value") == 1
+    ]
+    sizes = {len(strip_scratch(sig, launch)[0])}
+    if len(sig) >= 2 and sig[-1][0] == "ptr" and sig[-2][0] == "ptr":
+        sizes.add(len(sig) - 2)
+    without_ones = [rec for i, rec in enumerate(kept) if i not in set(ones)]
+    # Prefer reading the record as-is over dropping int args equal to 1.
+    for candidate in (kept, without_ones):
+        if any(
+            len(candidate) == n_params
+            and all(
+                (rec.get("kind") == "tensor") == (kind == "ptr")
+                for rec, (kind, _bits) in zip(candidate, sig)
+            )
+            for n_params in sizes
+        ):
+            kept = candidate
+            break
+    if len(kept) == len(args):
+        return launch
+    return {**launch, "args": kept}
+
+
 def strip_scratch(
     sig: list[tuple[str, int]], launch: dict | None = None
 ) -> tuple[list[tuple[str, int]], int]:
@@ -133,6 +182,18 @@ def strip_scratch(
     return sig, 0
 
 
+def _arg_list_problem(args: list[dict], user_sig: list[tuple[str, int]]) -> str:
+    """Why the recorded args cannot map one-to-one onto the user params
+    (an arg the replay cannot build, e.g. a TMA descriptor, or a count
+    mismatch), or "" when they can."""
+    for rec in args:
+        if rec.get("kind") == "other" and not _is_none_arg(rec):
+            return f"unsupported: arg {rec.get('name')} is not a tensor or scalar"
+    if len(args) != len(user_sig):
+        return f"arg-count {len(args)} != signature {len(user_sig)}"
+    return ""
+
+
 def validate_launch(launch: dict | None, sig: list[tuple[str, int]]) -> list[str]:
     """Check a launch record against the parsed signature. Returns problems."""
     if not launch:
@@ -153,10 +214,11 @@ def validate_launch(launch: dict | None, sig: list[tuple[str, int]]) -> list[str
         size = block.get(key, 0)
         if not isinstance(size, int) or size < 0:
             problems.append(f"bad-{key}")
-    user_sig, _n_scratch = strip_scratch(sig, launch)
     args = launch.get("args") or []
-    if len(args) != len(user_sig):
-        problems.append(f"arg-count {len(args)} != signature {len(user_sig)}")
+    user_sig, _n_scratch = strip_scratch(sig, launch)
+    arg_list_problem = _arg_list_problem(args, user_sig)
+    if arg_list_problem:
+        problems.append(arg_list_problem)
         return problems
     for rec, (kind, _bits) in zip(args, user_sig):
         want = "ptr" if rec.get("kind") == "tensor" else "scalar"
@@ -280,8 +342,17 @@ _DTYPE_CTORS = {
 }
 
 
-def alloc_tensors(torch, records: list[dict], device: str, seed: int) -> dict[str, Any]:
-    """Allocate recorded tensor args: randn inputs, zeros outputs (seeded)."""
+_FLOAT_CTORS = ("half", "bfloat16", "float", "double")
+_BYTE_CTORS = ("uint8", "bool")
+
+
+def alloc_tensors(
+    torch, records: list[dict], device: str | None, seed: int
+) -> dict[str, Any]:
+    """Allocate recorded tensor args (seeded): recorded ``values`` when
+    present, else zeros outputs, randn float inputs and random-byte
+    uint8/bool inputs. Raises ValueError for wider integer inputs without
+    recorded values."""
     torch.manual_seed(seed)
     if hasattr(torch, "cuda") and hasattr(torch.cuda, "manual_seed_all"):
         torch.cuda.manual_seed_all(seed)
@@ -293,10 +364,24 @@ def alloc_tensors(torch, records: list[dict], device: str, seed: int) -> dict[st
         if ctor is None:
             raise ValueError(f"unsupported dtype {rec.get('dtype')!r}")
         shape = tuple(rec.get("shape", []))
-        make = torch.zeros if rec.get("role") == "out" else torch.randn
-        out[rec["name"]] = make(
-            shape, dtype=getattr(torch, ctor), device=device or "cuda"
-        )
+        dtype = getattr(torch, ctor)
+        dev = device or "cuda"
+        if "values" in rec:
+            out[rec["name"]] = torch.tensor(
+                rec["values"], dtype=dtype, device=dev
+            ).reshape(shape)
+        elif rec.get("role") == "out":
+            out[rec["name"]] = torch.zeros(shape, dtype=dtype, device=dev)
+        elif ctor in _FLOAT_CTORS:
+            out[rec["name"]] = torch.randn(shape, dtype=dtype, device=dev)
+        elif ctor in _BYTE_CTORS:
+            # Packed low-precision data and scales: any byte pattern is valid.
+            high = 2 if ctor == "bool" else 256
+            out[rec["name"]] = torch.randint(0, high, shape, dtype=dtype, device=dev)
+        else:
+            # Wider integer inputs are indices, offsets or counts; random
+            # values would address out of bounds.
+            raise ValueError(f"integer input {rec['name']} has no recorded values")
     return out
 
 
@@ -377,7 +462,7 @@ def launch_case(
     with open(os.path.join(cdir, "compile.json")) as f:
         compile_info = json.load(f)
     name, sig = parse_kernel_signature(llir)
-    launch = compile_info.get("launch")
+    launch = drop_specialized_args(compile_info.get("launch"), sig)
     problems = validate_launch(launch, sig)
     if problems:
         return {"status": problems[0], "problems": problems}
@@ -407,14 +492,18 @@ def launch_case(
             hip.hipModuleGetFunction(ctypes.byref(func), module, name.encode()),
             "get function",
         )
-        tensors = alloc_tensors(torch, launch["args"], launch.get("device"), seed)
         values = []
         rec: dict = {}
         try:
+            tensors = alloc_tensors(torch, launch["args"], launch.get("device"), seed)
             for rec in launch["args"]:
                 values.append(_resolve_arg_value(rec, tensors))
-        except ValueError:
-            return {"status": "unsupported-arg", "arg": rec.get("name")}
+        except ValueError as e:
+            return {
+                "status": "unsupported-arg",
+                "arg": rec.get("name"),
+                "problems": [str(e)],
+            }
         values += _scratch_ptrs(torch, launch, n_scratch)
         buffers, arg_array = make_arg_ptrs(values, sig)
         gx, gy, gz = (int(v) for v in launch["grid"])
