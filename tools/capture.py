@@ -12,14 +12,18 @@ How capture works: every kernel compiled through Triton Beta ends up as a
 ``asm["llir"]`` -- that string is the artifact we export, plus ``ttgir``
 (translator input), ``ttir`` and the backend reference output (``amdgcn``
 on AMD via ``HIPBackend.make_amdgcn``, ``ptx`` on NVIDIA via
-``CUDABackend.make_ptx``) for provenance. Two hooks cover every
+``CUDABackend.make_ptx``) for provenance. Three hooks cover every
 launch path:
 
 - ``JITFunction.run`` (covers ``@triton.jit`` launches and autotune winners:
   the autotuner benchmarks candidates internally and the winning launch is
   what ``run`` returns, so the winner's ``llir`` is what we capture).
-- ``triton.compiler.compiler.compile`` (covers inductor-generated and other
-  direct compiles, e.g. the torchtlx path).
+- ``triton.compiler.compiler.compile`` (covers direct compiles).
+- ``CachingAutotuner.run`` (covers inductor template launches such as the
+  torchtlx path: the template wrapper compiles through ``triton.compile``
+  bound in inductor and launches the ``CompiledKernel`` directly, so
+  neither hook above fires; the wrapper's launcher holds the
+  ``CompiledKernel`` and its trailing run args carry the grid).
 
 Best-config selection for multi-config kernels is therefore the runtime
 winner by default. ``config_filter`` (a ``re`` pattern matched against each
@@ -537,6 +541,81 @@ def _compile_wrapper(session, original_compile):
     return compile_and_capture
 
 
+def _launcher_kernel(launcher) -> object | None:
+    """CompiledKernel behind one inductor launcher, or None."""
+    scope = getattr(launcher, "__globals__", None) or {}
+    kernel = scope.get("bin")
+    if kernel is not None:
+        return kernel
+    compile_result = getattr(launcher, "_compile_result", None)
+    kernel = getattr(compile_result, "kernel", None)
+    if kernel is not None:
+        return kernel
+    for attr in ("bin", "kernel"):
+        kernel = getattr(launcher, attr, None)
+        if kernel is not None:
+            return kernel
+    return None
+
+
+def _autotuner_kernels(autotuner) -> list:
+    """Distinct compiled kernels behind an autotuner's launchers."""
+    kernels: list = []
+    for launcher in getattr(autotuner, "launchers", None) or []:
+        try:
+            kernel = _launcher_kernel(launcher)
+        except Exception:
+            continue
+        if kernel is not None and all(kernel is not seen for seen in kernels):
+            kernels.append(kernel)
+    return kernels
+
+
+def _autotuner_split(autotuner, args) -> tuple[list, tuple | None]:
+    """Split template-run args into kernel args and trailing grid dims."""
+    count = 0
+    try:
+        extra = getattr(autotuner, "inductor_meta", {}).get("extra_launcher_args")
+        count = len(extra or [])
+    except Exception:
+        count = 0
+    if count and len(args) >= count:
+        tail = tuple(args[-count:])
+        if all(isinstance(v, int) and not isinstance(v, bool) for v in tail):
+            return list(args[:-count]), tuple(int(v) for v in tail)
+    if len(args) >= 3:
+        tail = tuple(args[-3:])
+        if all(isinstance(v, int) and not isinstance(v, bool) for v in tail):
+            return list(args[:-3]), tuple(int(v) for v in tail)
+    return list(args), None
+
+
+def _autotuner_run_wrapper(session, original_run):
+    """CachingAutotuner.run wrapper capturing inductor template launches."""
+
+    def run_and_capture(autotuner, *args, **kwargs):
+        bind_args, grid = _autotuner_split(autotuner, args)
+        jit_fn = getattr(autotuner, "fn", None)
+        pre_hashes = _snapshot_pre_hashes(jit_fn, bind_args, {"grid": grid})
+        result = original_run(autotuner, *args, **kwargs)
+        for kernel in _autotuner_kernels(autotuner):
+            if id(kernel) not in session._seen:
+                session._seen.add(id(kernel))
+                label = getattr(kernel, "name", None) or getattr(
+                    jit_fn, "__name__", type(jit_fn).__name__
+                )
+                session.kernels.append((label, kernel))
+            try:
+                session.launches[id(kernel)] = record_launch(
+                    jit_fn, bind_args, {"grid": grid}, kernel, pre_hashes=pre_hashes
+                )
+            except Exception:
+                pass
+        return result
+
+    return run_and_capture
+
+
 class CaptureSession:
     """Context manager installing JITFunction.run + triton.compile hooks.
 
@@ -585,6 +664,19 @@ class CaptureSession:
                     compiler_mod,
                     "compile",
                     _compile_wrapper(self, compiler_mod.compile),
+                )
+        except Exception:
+            pass
+
+        try:
+            import torch._inductor.runtime.triton_heuristics as heuristics_mod
+
+            autotuner_cls = getattr(heuristics_mod, "CachingAutotuner", None)
+            if autotuner_cls is not None and hasattr(autotuner_cls, "run"):
+                self._patch(
+                    autotuner_cls,
+                    "run",
+                    _autotuner_run_wrapper(self, autotuner_cls.run),
                 )
         except Exception:
             pass
