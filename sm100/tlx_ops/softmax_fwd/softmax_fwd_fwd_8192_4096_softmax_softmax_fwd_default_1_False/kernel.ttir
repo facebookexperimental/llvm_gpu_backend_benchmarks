@@ -1,0 +1,58 @@
+#linear = #ttg.linear<{register = [[0, 1], [0, 2], [0, 4], [0, 1024], [0, 2048]], lane = [[0, 8], [0, 16], [0, 32], [0, 64], [0, 128]], warp = [[0, 256], [0, 512]], block = []}>
+module attributes {tlx.has_tlx_ops = true, triton.skip_generic_pipeline, "ttg.cluster-dim-x" = 1 : i32, "ttg.cluster-dim-y" = 1 : i32, "ttg.cluster-dim-z" = 1 : i32, "ttg.num-ctas" = 1 : i32, "ttg.num-warps" = 4 : i32, ttg.target = "cuda:100", "ttg.threads-per-warp" = 32 : i32} {
+  tt.func public @_softmax(%X: !tt.ptr<bf16> {tt.divisibility = 16 : i32}, %Y: !tt.ptr<bf16> {tt.divisibility = 16 : i32}, %M: i32 {tt.divisibility = 16 : i32}) attributes {noinline = false} {
+    %c4096_i64 = arith.constant 4096 : i64
+    %out = arith.constant dense<0.000000e+00> : tensor<1x4096xbf16>
+    %e = arith.constant dense<1.44269502> : tensor<1x4096xf32>
+    %denominator = arith.constant dense<0.000000e+00> : tensor<1xf32>
+    %x = arith.constant dense<0xFF800000> : tensor<1x4096xf32>
+    %cst = arith.constant dense<4096> : tensor<1x4096xi64>
+    %total = arith.constant dense<0xFF800000> : tensor<1xf32>
+    %rows = tt.get_program_id x : i32
+    %rows_0 = arith.extsi %rows : i32 to i64
+    %cols = tt.make_range {end = 4096 : i32, start = 0 : i32} : tensor<4096xi32>
+    %cols_1 = arith.extsi %cols : tensor<4096xi32> to tensor<4096xi64>
+    %mask = arith.extsi %M : i32 to i64
+    %mask_2 = arith.cmpi slt, %rows_0, %mask : i64
+    %mask_3 = tt.expand_dims %cols_1 {axis = 0 : i32} : tensor<4096xi64> -> tensor<1x4096xi64>
+    %mask_4 = arith.cmpi slt, %mask_3, %cst : tensor<1x4096xi64>
+    %mask_5 = tt.splat %mask_2 : i1 -> tensor<1x4096xi1>
+    %mask_6 = arith.andi %mask_5, %mask_4 : tensor<1x4096xi1>
+    %x_7 = arith.muli %rows_0, %c4096_i64 : i64
+    %x_8 = tt.splat %x_7 : i64 -> tensor<1x4096xi64>
+    %x_9 = arith.addi %x_8, %mask_3 : tensor<1x4096xi64>
+    %out_10 = tt.splat %X : !tt.ptr<bf16> -> tensor<1x4096x!tt.ptr<bf16>>
+    %out_11 = tt.addptr %out_10, %x_9 : tensor<1x4096x!tt.ptr<bf16>>, tensor<1x4096xi64>
+    %out_12 = tt.load %out_11, %mask_6, %out : tensor<1x4096x!tt.ptr<bf16>>
+    %out_13 = tlx.require_layout %out_12 : tensor<1x4096xbf16> -> tensor<1x4096xbf16, #tlx.no_verify_layout<#linear>>
+    %out_14 = tlx.release_layout %out_13 : tensor<1x4096xbf16, #tlx.no_verify_layout<#linear>> -> tensor<1x4096xbf16>
+    %x_15 = arith.extf %out_14 : tensor<1x4096xbf16> to tensor<1x4096xf32>
+    %x_16 = arith.select %mask_4, %x_15, %x : tensor<1x4096xi1>, tensor<1x4096xf32>
+    %value = "tt.reduce"(%x_16) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%total_28: f32, %total_29: f32):
+      %value_30 = arith.maxnumf %total_28, %total_29 : f32
+      tt.reduce.return %value_30 : f32
+    }) : (tensor<1x4096xf32>) -> tensor<1xf32>
+    %total_17 = arith.maxnumf %value, %total : tensor<1xf32>
+    %e_18 = tt.expand_dims %total_17 {axis = 1 : i32} : tensor<1xf32> -> tensor<1x1xf32>
+    %e_19 = tt.broadcast %e_18 : tensor<1x1xf32> -> tensor<1x4096xf32>
+    %e_20 = arith.subf %x_16, %e_19 : tensor<1x4096xf32>
+    %e_21 = arith.mulf %e_20, %e : tensor<1x4096xf32>
+    %e_22 = math.exp2 %e_21 : tensor<1x4096xf32>
+    %denominator_23 = "tt.reduce"(%e_22) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%denominator_28: f32, %denominator_29: f32):
+      %denominator_30 = arith.addf %denominator_28, %denominator_29 : f32
+      tt.reduce.return %denominator_30 : f32
+    }) : (tensor<1x4096xf32>) -> tensor<1xf32>
+    %denominator_24 = arith.addf %denominator_23, %denominator : tensor<1xf32>
+    %value_25 = tt.expand_dims %denominator_24 {axis = 1 : i32} : tensor<1xf32> -> tensor<1x1xf32>
+    %value_26 = tt.broadcast %value_25 : tensor<1x1xf32> -> tensor<1x4096xf32>
+    %value_27 = arith.divf %e_22, %value_26 : tensor<1x4096xf32>
+    %0 = tt.addptr %Y, %x_7 : !tt.ptr<bf16>, i64
+    %1 = tt.splat %0 : !tt.ptr<bf16> -> tensor<1x4096x!tt.ptr<bf16>>
+    %2 = tt.addptr %1, %mask_3 : tensor<1x4096x!tt.ptr<bf16>>, tensor<1x4096xi64>
+    %3 = arith.truncf %value_27 : tensor<1x4096xf32> to tensor<1x4096xbf16>
+    tt.store %2, %3, %mask_6 : tensor<1x4096x!tt.ptr<bf16>>
+    tt.return
+  }
+}
