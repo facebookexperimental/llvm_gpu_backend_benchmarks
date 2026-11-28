@@ -12,7 +12,7 @@ How capture works: every kernel compiled through Triton Beta ends up as a
 ``asm["llir"]`` -- that string is the artifact we export, plus ``ttgir``
 (translator input), ``ttir`` and the backend reference output (``amdgcn``
 on AMD via ``HIPBackend.make_amdgcn``, ``ptx`` on NVIDIA via
-``CUDABackend.make_ptx``) for provenance. Three hooks cover every
+``CUDABackend.make_ptx``) for provenance. Four hooks cover every
 launch path:
 
 - ``JITFunction.run`` (covers ``@triton.jit`` launches and autotune winners:
@@ -24,6 +24,9 @@ launch path:
   bound in inductor and launches the ``CompiledKernel`` directly, so
   neither hook above fires; the wrapper's launcher holds the
   ``CompiledKernel`` and its trailing run args carry the grid).
+- Inductor compile-result ``make_launcher`` (covers template kernels
+  compiled in worker processes and launched via the static launcher, which
+  bypass both hooks above in the parent process).
 
 Best-config selection for multi-config kernels is therefore the runtime
 winner by default. ``config_filter`` (a ``re`` pattern matched against each
@@ -668,8 +671,89 @@ def _autotuner_run_wrapper(session, original_run):
     return run_and_capture
 
 
+def _read_stage_dir(directory: str, stem: str) -> dict | None:
+    """Stage texts from ``<stem>.<stage>`` files in one directory, or None."""
+    asm: dict[str, str] = {}
+    for stage in STAGES:
+        try:
+            with open(os.path.join(directory, f"{stem}.{stage}")) as f:
+                asm[stage] = f.read()
+        except OSError:
+            continue
+    return asm if "llir" in asm else None
+
+
+def _load_cached_asm(kernel, compile_result=None) -> dict | None:
+    """Stage texts for a deserialized kernel, from its Triton cache dir.
+
+    Statically launched compile results arrive without ``asm``; the worker
+    that compiled them wrote the stages next to the cubin. The cubin path
+    is usually unset at launcher time, so the hash dir is reconstructed
+    from ``kernel.hash`` via the inductor cache layout instead. Returns
+    None when no candidate directory holds the ``llir`` stage.
+    """
+    stem = getattr(kernel, "name", None)
+    if not stem:
+        return None
+    cubin = getattr(kernel, "cubin_path", None) or getattr(kernel, "_cubin_path", None)
+    if cubin:
+        directory, _ = os.path.split(cubin)
+        asm = _read_stage_dir(directory, stem)
+        if asm is not None:
+            return asm
+    try:
+        from torch._inductor.runtime.cache_dir_utils import triton_cache_dir
+        from torch._inductor.runtime.runtime_utils import triton_hash_to_path_key
+
+        compile_meta = getattr(compile_result, "compile_meta", None) or {}
+        device = compile_meta.get("device")
+        if not isinstance(device, int):
+            try:
+                import torch
+
+                device = torch.cuda.current_device()
+            except Exception:
+                device = 0
+        directory = os.path.join(
+            triton_cache_dir(device), triton_hash_to_path_key(kernel.hash)
+        )
+        return _read_stage_dir(directory, stem)
+    except Exception:
+        return None
+
+
+def _launcher_wrapper(session, original_make_launcher):
+    """Inductor compile-result wrapper capturing statically launched kernels.
+
+    Inductor template kernels (e.g. the torchtlx GEMM path) are compiled in
+    worker processes and launched in the parent via a static launcher that
+    loads the cubin directly, so neither ``JITFunction.run`` nor
+    ``triton.compile`` runs in the parent. The compile result still carries
+    the ``CompiledKernel`` on ``self.kernel``, but without ``asm``; the
+    stages are recovered from the Triton cache dir for its hash.
+    """
+
+    def make_launcher_and_capture(compile_result, *args, **kwargs):
+        launcher = original_make_launcher(compile_result, *args, **kwargs)
+        kernel = getattr(compile_result, "kernel", None)
+        asm = getattr(kernel, "asm", None)
+        if not (isinstance(asm, dict) and "llir" in asm):
+            asm = _load_cached_asm(kernel, compile_result)
+            if asm is not None:
+                try:
+                    kernel.asm = asm
+                except Exception:
+                    asm = None
+        if isinstance(asm, dict) and "llir" in asm and id(kernel) not in session._seen:
+            session._seen.add(id(kernel))
+            session.kernels.append(("inductor.compile_result", kernel))
+        return launcher
+
+    return make_launcher_and_capture
+
+
 class CaptureSession:
-    """Context manager installing JITFunction.run + triton.compile hooks.
+    """Context manager installing capture hooks (JITFunction, compile, inductor).
 
     ``session.kernels`` accumulates distinct (label, CompiledKernel) pairs
     (cache-hit relaunches return an already-seen object and are skipped).
@@ -735,11 +819,34 @@ class CaptureSession:
                 )
         except Exception:
             pass
+        self._install_launcher_hook()
 
         if self.config_filter:
             self._install_config_filter()
         self._install_bench_hook()
         return self
+
+    def _install_launcher_hook(self):
+        """Record kernels from inductor compile results, if torch is present.
+
+        No-op (and never raising) when the inductor runtime is unavailable:
+        host-side tooling imports this module without torch or triton.
+        """
+        try:
+            from torch._inductor.runtime.triton_heuristics import (
+                StaticTritonCompileResult,
+                TritonCompileResult,
+            )
+
+            for cls in (TritonCompileResult, StaticTritonCompileResult):
+                if hasattr(cls, "make_launcher"):
+                    self._patch(
+                        cls,
+                        "make_launcher",
+                        _launcher_wrapper(self, cls.make_launcher),
+                    )
+        except Exception:
+            pass
 
     def _install_bench_hook(self):
         """Record per-config autotune timings keyed by compiled kernel.
