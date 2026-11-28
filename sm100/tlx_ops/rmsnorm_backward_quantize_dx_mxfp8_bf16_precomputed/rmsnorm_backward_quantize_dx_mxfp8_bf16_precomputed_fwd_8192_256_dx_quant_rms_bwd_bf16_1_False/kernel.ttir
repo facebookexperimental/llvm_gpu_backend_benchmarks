@@ -1,0 +1,143 @@
+#shared = #ttg.nvmma_shared<{swizzlingByteWidth = 128, transposed = false, elementBitWidth = 16}>
+#smem = #ttg.shared_memory
+module attributes {tlx.has_explicit_local_mem_access = true, triton.skip_generic_pipeline, "ttg.cluster-dim-x" = 1 : i32, "ttg.cluster-dim-y" = 1 : i32, "ttg.cluster-dim-z" = 1 : i32, "ttg.num-ctas" = 1 : i32, "ttg.num-warps" = 8 : i32, ttg.target = "cuda:100", "ttg.threads-per-warp" = 32 : i32} {
+  tt.func public @_bf16_quant_backward(%X: !tt.ptr<bf16> {tt.divisibility = 16 : i32}, %Dy: !tt.ptr<bf16> {tt.divisibility = 16 : i32}, %W: !tt.ptr<bf16> {tt.divisibility = 16 : i32}, %Rstd: !tt.ptr<f32> {tt.divisibility = 16 : i32}, %Dz: !tt.ptr<bf16> {tt.divisibility = 16 : i32}, %DwPart: !tt.ptr<f32> {tt.divisibility = 16 : i32}, %Starts: !tt.ptr<i32> {tt.divisibility = 16 : i32}, %Counts: !tt.ptr<i32> {tt.divisibility = 16 : i32}, %TILES: i32 {tt.divisibility = 16 : i32}) attributes {noinline = false} {
+    %c0_i32 = arith.constant 0 : i32
+    %cst = arith.constant 1.000000e+00 : f32
+    %cst_0 = arith.constant 2.560000e+02 : f32
+    %cst_1 = arith.constant dense<0.000000e+00> : tensor<32xf32>
+    %w = arith.constant dense<0.000000e+00> : tensor<256xbf16>
+    %cst_2 = arith.constant dense<256> : tensor<32x1xi64>
+    %cst_3 = arith.constant dense<0.000000e+00> : tensor<32x256xbf16>
+    %cst_4 = arith.constant dense<256> : tensor<256xi32>
+    %c256_i32 = arith.constant 256 : i32
+    %cols = tt.make_range {end = 256 : i32, start = 0 : i32} : tensor<256xi32>
+    %lr = tt.make_range {end = 32 : i32, start = 0 : i32} : tensor<32xi32>
+    %w_5 = arith.cmpi slt, %cols, %cst_4 : tensor<256xi32>
+    %w_6 = tt.splat %W : !tt.ptr<bf16> -> tensor<256x!tt.ptr<bf16>>
+    %w_7 = tt.addptr %w_6, %cols : tensor<256x!tt.ptr<bf16>>, tensor<256xi32>
+    %w_8 = tt.load %w_7, %w_5, %w : tensor<256x!tt.ptr<bf16>>
+    %0 = tt.get_program_id x : i32
+    %1 = tt.get_num_programs x : i32
+    %rows = arith.extsi %lr : tensor<32xi32> to tensor<32xi64>
+    %mask = tt.expand_dims %w_5 {axis = 0 : i32} : tensor<256xi1> -> tensor<1x256xi1>
+    %mask_9 = tt.broadcast %mask : tensor<1x256xi1> -> tensor<32x256xi1>
+    %idx = tt.expand_dims %cols {axis = 0 : i32} : tensor<256xi32> -> tensor<1x256xi32>
+    %idx_10 = arith.extsi %idx : tensor<1x256xi32> to tensor<1x256xi64>
+    %idx_11 = tt.broadcast %idx_10 : tensor<1x256xi64> -> tensor<32x256xi64>
+    %x = tt.splat %X : !tt.ptr<bf16> -> tensor<32x256x!tt.ptr<bf16>>
+    %dy = tt.splat %Dy : !tt.ptr<bf16> -> tensor<32x256x!tt.ptr<bf16>>
+    %rr = tt.splat %Rstd : !tt.ptr<f32> -> tensor<32x!tt.ptr<f32>>
+    %wdy = tt.expand_dims %w_8 {axis = 0 : i32} : tensor<256xbf16> -> tensor<1x256xbf16>
+    %wdy_12 = tt.broadcast %wdy : tensor<1x256xbf16> -> tensor<32x256xbf16>
+    %dot = tt.approx_divf %cst, %cst_0 : f32
+    %dot_13 = tt.splat %dot : f32 -> tensor<32x1xf32>
+    %2 = tt.splat %Dz : !tt.ptr<bf16> -> tensor<32x256x!tt.ptr<bf16>>
+    %accum = scf.for %tile = %0 to %TILES step %1 iter_args(%accum_14 = %cst_3) -> (tensor<32x256xbf16>)  : i32 {
+      %src = tt.addptr %Starts, %tile : !tt.ptr<i32>, i32
+      %src_15 = tt.load %src : !tt.ptr<i32>
+      %valid = tt.addptr %Counts, %tile : !tt.ptr<i32>, i32
+      %valid_16 = tt.load %valid : !tt.ptr<i32>
+      %valid_17 = tt.splat %valid_16 : i32 -> tensor<32xi32>
+      %valid_18 = arith.cmpi slt, %lr, %valid_17 : tensor<32xi32>
+      %rows_19 = arith.extsi %src_15 : i32 to i64
+      %rows_20 = tt.splat %rows_19 : i64 -> tensor<32xi64>
+      %rows_21 = arith.addi %rows_20, %rows : tensor<32xi64>
+      %mask_22 = tt.expand_dims %valid_18 {axis = 1 : i32} : tensor<32xi1> -> tensor<32x1xi1>
+      %mask_23 = tt.broadcast %mask_22 : tensor<32x1xi1> -> tensor<32x256xi1>
+      %mask_24 = arith.andi %mask_23, %mask_9 : tensor<32x256xi1>
+      %idx_25 = tt.expand_dims %rows_21 {axis = 1 : i32} : tensor<32xi64> -> tensor<32x1xi64>
+      %idx_26 = arith.muli %idx_25, %cst_2 : tensor<32x1xi64>
+      %idx_27 = tt.broadcast %idx_26 : tensor<32x1xi64> -> tensor<32x256xi64>
+      %idx_28 = arith.addi %idx_27, %idx_11 : tensor<32x256xi64>
+      %buf = ttg.local_alloc : () -> !ttg.memdesc<1x32x256xbf16, #shared, #smem, mutable>
+      %x_29 = tt.addptr %x, %idx_28 : tensor<32x256x!tt.ptr<bf16>>, tensor<32x256xi64>
+      %x_30 = ttg.memdesc_index %buf[%c0_i32] : !ttg.memdesc<1x32x256xbf16, #shared, #smem, mutable> -> !ttg.memdesc<32x256xbf16, #shared, #smem, mutable>
+      %x_31 = ttg.async_copy_global_to_local %x_29, %x_30 mask %mask_24 other %cst_3 : tensor<32x256x!tt.ptr<bf16>> -> <32x256xbf16, #shared, #smem, mutable>
+      %x_32 = ttg.async_commit_group
+      %x_33 = ttg.async_wait {num = 0 : i32}
+      ttng.fence_async_shared {bCluster = false}
+      ttg.barrier all
+      %out = ttg.local_load %x_30 : !ttg.memdesc<32x256xbf16, #shared, #smem, mutable> -> tensor<32x256xbf16>
+      ttg.barrier all
+      %buf_34 = ttg.local_alloc : () -> !ttg.memdesc<1x32x256xbf16, #shared, #smem, mutable>
+      %dy_35 = tt.addptr %dy, %idx_28 : tensor<32x256x!tt.ptr<bf16>>, tensor<32x256xi64>
+      %dy_36 = ttg.memdesc_index %buf_34[%c0_i32] : !ttg.memdesc<1x32x256xbf16, #shared, #smem, mutable> -> !ttg.memdesc<32x256xbf16, #shared, #smem, mutable>
+      %dy_37 = ttg.async_copy_global_to_local %dy_35, %dy_36 mask %mask_24 other %cst_3 : tensor<32x256x!tt.ptr<bf16>> -> <32x256xbf16, #shared, #smem, mutable>
+      %dy_38 = ttg.async_commit_group
+      %dy_39 = ttg.async_wait {num = 0 : i32}
+      ttng.fence_async_shared {bCluster = false}
+      ttg.barrier all
+      %out_40 = ttg.local_load %dy_36 : !ttg.memdesc<32x256xbf16, #shared, #smem, mutable> -> tensor<32x256xbf16>
+      ttg.barrier all
+      %rr_41 = tt.addptr %rr, %rows_21 : tensor<32x!tt.ptr<f32>>, tensor<32xi64>
+      %rr_42 = tt.load %rr_41, %valid_18, %cst_1 : tensor<32x!tt.ptr<f32>>
+      %rr_43 = arith.truncf %rr_42 : tensor<32xf32> to tensor<32xbf16>
+      %rr_44 = tt.expand_dims %rr_43 {axis = 1 : i32} : tensor<32xbf16> -> tensor<32x1xbf16>
+      %xhat = tt.broadcast %rr_44 : tensor<32x1xbf16> -> tensor<32x256xbf16>
+      %xhat_45 = tt.elementwise_inline_asm "mul.rn.bf16x2 $0, $1, $2;" {constraints = "=r,r,r", packed_element = 2 : i32, pure = true} %out, %xhat : tensor<32x256xbf16>, tensor<32x256xbf16> -> tensor<32x256xbf16>
+      %wdy_46 = tt.elementwise_inline_asm "mul.rn.bf16x2 $0, $1, $2;" {constraints = "=r,r,r", packed_element = 2 : i32, pure = true} %out_40, %wdy_12 : tensor<32x256xbf16>, tensor<32x256xbf16> -> tensor<32x256xbf16>
+      %dot_47 = tt.reshape %xhat_45 : tensor<32x256xbf16> -> tensor<32x32x4x2xbf16>
+      %dot_48, %dot_49 = tt.split %dot_47 : tensor<32x32x4x2xbf16> -> tensor<32x32x4xbf16>
+      %dot_50 = tt.reshape %wdy_46 : tensor<32x256xbf16> -> tensor<32x32x4x2xbf16>
+      %dot_51, %dot_52 = tt.split %dot_50 : tensor<32x32x4x2xbf16> -> tensor<32x32x4xbf16>
+      %dot_53 = tt.reshape %dot_48 : tensor<32x32x4xbf16> -> tensor<32x32x2x2xbf16>
+      %dot_54, %dot_55 = tt.split %dot_53 : tensor<32x32x2x2xbf16> -> tensor<32x32x2xbf16>
+      %dot_56, %dot_57 = tt.split %dot_54 : tensor<32x32x2xbf16> -> tensor<32x32xbf16>
+      %dot_58, %dot_59 = tt.split %dot_55 : tensor<32x32x2xbf16> -> tensor<32x32xbf16>
+      %dot_60 = tt.reshape %dot_51 : tensor<32x32x4xbf16> -> tensor<32x32x2x2xbf16>
+      %dot_61, %dot_62 = tt.split %dot_60 : tensor<32x32x2x2xbf16> -> tensor<32x32x2xbf16>
+      %dot_63, %dot_64 = tt.split %dot_61 : tensor<32x32x2xbf16> -> tensor<32x32xbf16>
+      %dot_65, %dot_66 = tt.split %dot_62 : tensor<32x32x2xbf16> -> tensor<32x32xbf16>
+      %pe = tt.elementwise_inline_asm "mul.rn.bf16x2 $0, $1, $2;" {constraints = "=r,r,r", packed_element = 2 : i32, pure = true} %dot_56, %dot_63 : tensor<32x32xbf16>, tensor<32x32xbf16> -> tensor<32x32xbf16>
+      %pe_67 = tt.elementwise_inline_asm "fma.rn.bf16x2 $0, $1, $2, $3;" {constraints = "=r,r,r,r", packed_element = 2 : i32, pure = true} %dot_58, %dot_65, %pe : tensor<32x32xbf16>, tensor<32x32xbf16>, tensor<32x32xbf16> -> tensor<32x32xbf16>
+      %pe_68 = tt.elementwise_inline_asm "fma.rn.bf16x2 $0, $1, $2, $3;" {constraints = "=r,r,r,r", packed_element = 2 : i32, pure = true} %dot_57, %dot_64, %pe_67 : tensor<32x32xbf16>, tensor<32x32xbf16>, tensor<32x32xbf16> -> tensor<32x32xbf16>
+      %pe_69 = tt.elementwise_inline_asm "fma.rn.bf16x2 $0, $1, $2, $3;" {constraints = "=r,r,r,r", packed_element = 2 : i32, pure = true} %dot_59, %dot_66, %pe_68 : tensor<32x32xbf16>, tensor<32x32xbf16>, tensor<32x32xbf16> -> tensor<32x32xbf16>
+      %dot_70 = tt.reshape %dot_49 : tensor<32x32x4xbf16> -> tensor<32x32x2x2xbf16>
+      %dot_71, %dot_72 = tt.split %dot_70 : tensor<32x32x2x2xbf16> -> tensor<32x32x2xbf16>
+      %dot_73, %dot_74 = tt.split %dot_71 : tensor<32x32x2xbf16> -> tensor<32x32xbf16>
+      %dot_75, %dot_76 = tt.split %dot_72 : tensor<32x32x2xbf16> -> tensor<32x32xbf16>
+      %dot_77 = tt.reshape %dot_52 : tensor<32x32x4xbf16> -> tensor<32x32x2x2xbf16>
+      %dot_78, %dot_79 = tt.split %dot_77 : tensor<32x32x2x2xbf16> -> tensor<32x32x2xbf16>
+      %dot_80, %dot_81 = tt.split %dot_78 : tensor<32x32x2xbf16> -> tensor<32x32xbf16>
+      %dot_82, %dot_83 = tt.split %dot_79 : tensor<32x32x2xbf16> -> tensor<32x32xbf16>
+      %po = tt.elementwise_inline_asm "mul.rn.bf16x2 $0, $1, $2;" {constraints = "=r,r,r", packed_element = 2 : i32, pure = true} %dot_73, %dot_80 : tensor<32x32xbf16>, tensor<32x32xbf16> -> tensor<32x32xbf16>
+      %po_84 = tt.elementwise_inline_asm "fma.rn.bf16x2 $0, $1, $2, $3;" {constraints = "=r,r,r,r", packed_element = 2 : i32, pure = true} %dot_75, %dot_82, %po : tensor<32x32xbf16>, tensor<32x32xbf16>, tensor<32x32xbf16> -> tensor<32x32xbf16>
+      %po_85 = tt.elementwise_inline_asm "fma.rn.bf16x2 $0, $1, $2, $3;" {constraints = "=r,r,r,r", packed_element = 2 : i32, pure = true} %dot_74, %dot_81, %po_84 : tensor<32x32xbf16>, tensor<32x32xbf16>, tensor<32x32xbf16> -> tensor<32x32xbf16>
+      %po_86 = tt.elementwise_inline_asm "fma.rn.bf16x2 $0, $1, $2, $3;" {constraints = "=r,r,r,r", packed_element = 2 : i32, pure = true} %dot_76, %dot_83, %po_85 : tensor<32x32xbf16>, tensor<32x32xbf16>, tensor<32x32xbf16> -> tensor<32x32xbf16>
+      %dot_87 = arith.extf %pe_69 : tensor<32x32xbf16> to tensor<32x32xf32>
+      %dot_88 = arith.extf %po_86 : tensor<32x32xbf16> to tensor<32x32xf32>
+      %dot_89 = arith.addf %dot_87, %dot_88 : tensor<32x32xf32>
+      %dot_90 = "tt.reduce"(%dot_89) <{axis = 1 : i32, reduction_ordering = "unordered"}> ({
+      ^bb0(%dot_99: f32, %dot_100: f32):
+        %dot_101 = arith.addf %dot_99, %dot_100 : f32
+        tt.reduce.return %dot_101 : f32
+      }) : (tensor<32x32xf32>) -> tensor<32xf32>
+      %dot_91 = tt.expand_dims %dot_90 {axis = 1 : i32} : tensor<32xf32> -> tensor<32x1xf32>
+      %dot_92 = arith.mulf %dot_91, %dot_13 : tensor<32x1xf32>
+      %dot_93 = arith.truncf %dot_92 : tensor<32x1xf32> to tensor<32x1xbf16>
+      %neg = arith.extf %dot_93 : tensor<32x1xbf16> to tensor<32x1xf32>
+      %neg_94 = arith.negf %neg : tensor<32x1xf32>
+      %neg_95 = arith.truncf %neg_94 : tensor<32x1xf32> to tensor<32x1xbf16>
+      %dx = tt.broadcast %neg_95 : tensor<32x1xbf16> -> tensor<32x256xbf16>
+      %dx_96 = tt.elementwise_inline_asm "fma.rn.bf16x2 $0, $1, $2, $3;" {constraints = "=r,r,r,r", packed_element = 2 : i32, pure = true} %xhat_45, %dx, %wdy_46 : tensor<32x256xbf16>, tensor<32x256xbf16>, tensor<32x256xbf16> -> tensor<32x256xbf16>
+      %dx_97 = tt.elementwise_inline_asm "mul.rn.bf16x2 $0, $1, $2;" {constraints = "=r,r,r", packed_element = 2 : i32, pure = true} %dx_96, %xhat : tensor<32x256xbf16>, tensor<32x256xbf16> -> tensor<32x256xbf16>
+      %9 = tt.addptr %2, %idx_28 : tensor<32x256x!tt.ptr<bf16>>, tensor<32x256xi64>
+      tt.store %9, %dx_97, %mask_24 : tensor<32x256x!tt.ptr<bf16>>
+      %accum_98 = tt.elementwise_inline_asm "fma.rn.bf16x2 $0, $1, $2, $3;" {constraints = "=r,r,r,r", packed_element = 2 : i32, pure = true} %out_40, %xhat_45, %accum_14 : tensor<32x256xbf16>, tensor<32x256xbf16>, tensor<32x256xbf16> -> tensor<32x256xbf16>
+      scf.yield %accum_98 : tensor<32x256xbf16>
+    }
+    %3 = arith.muli %0, %c256_i32 : i32
+    %4 = tt.addptr %DwPart, %3 : !tt.ptr<f32>, i32
+    %5 = tt.splat %4 : !tt.ptr<f32> -> tensor<256x!tt.ptr<f32>>
+    %6 = tt.addptr %5, %cols : tensor<256x!tt.ptr<f32>>, tensor<256xi32>
+    %7 = arith.extf %accum : tensor<32x256xbf16> to tensor<32x256xf32>
+    %8 = "tt.reduce"(%7) <{axis = 0 : i32, reduction_ordering = "unordered"}> ({
+    ^bb0(%arg9: f32, %arg10: f32):
+      %9 = arith.addf %arg9, %arg10 : f32
+      tt.reduce.return %9 : f32
+    }) : (tensor<32x256xf32>) -> tensor<256xf32>
+    tt.store %6, %8, %w_5 : tensor<256x!tt.ptr<f32>>
+    tt.return
+  }
+}
